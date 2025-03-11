@@ -22,11 +22,10 @@ void sim_init(int argc, char *argv[]) {
     top->reset = 1;
     top->clock = 0;
 #ifdef VCD
-    Verilated::mkdir("logs");
     contextp->traceEverOn(true);
     tfp = new VerilatedVcdC;
     top->trace(tfp, 99);
-    tfp->open("logs/top.vcd");
+    tfp->open("build/top.vcd");
 #endif
     Verilated::commandArgs(argc,argv);
 }

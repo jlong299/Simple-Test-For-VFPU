@@ -22,7 +22,7 @@ $(TOP_V): $(SCALA_FILE)
 
 verilog: $(TOP_V)
 
-vcd ?= 
+vcd ?= 1
 ifeq ($(vcd), 1)
     CFLAGS += -DVCD
 endif
@@ -31,6 +31,7 @@ endif
 INC_PATH += $(abspath ./src/test/csrc/include)
 INCFLAGS = $(addprefix -I, $(INC_PATH))
 CFLAGS += $(INCFLAGS) $(CFLAGS_SIM) -DTOP_NAME="V$(TOPNAME)"
+
 
 # source file
 VSRCS = $(TOP_V)
