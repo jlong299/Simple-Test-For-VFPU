@@ -40,6 +40,11 @@ void sim_exit() {
 #endif
 }
 
+void display(){
+    printf("---------new sample-----------\n");
+
+}
+
 void single_cycle() {
     contextp->timeInc(1);
     top->clock = 0; top->eval();
@@ -53,6 +58,15 @@ void single_cycle() {
  tfp->dump(contextp->time());
 #endif
 }
+
+void gen_rand_input() {
+    //TODO:
+}
+
+void get_output() {
+    // TODO:
+    display();
+}   
 
 void reset(int n) {
     top->reset = 1;
@@ -68,13 +82,10 @@ void sim_main(int argc, char *argv[]) {
     /* main loop */
     while (!contextp->gotFinish()) {
     for (int i = 0; i < 8; i++) {
-            top->io_in = i;
-            top->eval();
-            cout << "in: " << i << endl;
-            cout << "out: " << bitset<8>(top->io_out) << endl;
+            gen_rand_input();
+            single_cycle();
         }
         break;
-        // single_cycle();
     }
 
     sim_exit();

@@ -8,4 +8,11 @@ void sim_exit();
 
 void sim_main(int argc, char *argv[]);
 
+
+uint64_t rand64() {
+  uint64_t tmp = rand();
+  tmp = (tmp << 32) + (uint32_t) rand();
+  return tmp;
+}
+
 #endif
