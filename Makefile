@@ -15,6 +15,7 @@ VERILATOR_FLAGS +=  -MMD --trace --build -cc --exe \
 
 # timescale set
 VERILATOR_FLAGS += --timescale 1us/1us
+VERILATOR_FLAGS += -j 33
 
 $(TOP_V): $(SCALA_FILE)
 	@mkdir -p $(@D)
@@ -40,19 +41,20 @@ CSRCS = $(shell find $(abspath ./src/test/csrc) -name "*.c" -or -name "*.cc" -or
 BIN = $(BUILD_DIR)/$(TOP)
 NPC_EXEC := $(BIN)
 
-sim: $(CSRCS) $(VSRCS)
+
+compile: $(VSRCS) $(CSRCS)
 	@rm -rf $(OBJ_DIR)
-	$(VERILATOR) $(VERILATOR_FLAGS) -top $(TOPNAME) $^ \
+	$(VERILATOR) $(VERILATOR_FLAGS) -top $(TOPNAME) $(VSRCS) $(CSRCS) \
 	$(addprefix -CFLAGS , $(CFLAGS)) $(addprefix -LDFLAGS , $(LDFLAGS)) \
 	--Mdir $(OBJ_DIR) -o $(abspath $(BIN))
 
-run:
+run: $(BIN)
 	@echo
 	@echo "------------ RUN --------------"
 	$(NPC_EXEC)
 	@echo "----- if you need vcd file. add vcd=y to make ----"
 
-srun: sim run
+srun: compile run
 
 clean:
 	rm -rf $(BUILD_DIR)
