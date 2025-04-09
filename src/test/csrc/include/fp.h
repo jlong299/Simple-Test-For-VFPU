@@ -7,6 +7,27 @@
 
 typedef unsigned short half;
 
+uint16_t fp32_to_fp16(float f) {
+    uint32_t fp32;
+    memcpy(&fp32, &f, sizeof(fp32));
+
+    uint32_t sign = (fp32 >> 16) & 0x8000;
+    int exp = ((fp32 >> 23) & 0xFF) - 112;   // 调整指数偏移
+    uint32_t frac = (fp32 & 0x007FFFFF) >> 13;
+
+    if (exp <= 0) {
+        // Subnormal 数处理
+        if (exp < -10) return sign;  // 太小，返回0
+        frac = (frac | 0x0800) >> (1 - exp);
+        return sign | frac;
+    } else if (exp >= 31) {
+        // 溢出处理
+        return sign | 0x7C00;  // Inf
+    }
+
+    return sign | (exp << 10) | frac;
+}
+
 
 float half_to_float(half h) {
     unsigned short sign = (h >> 15) & 0x1;
@@ -34,6 +55,11 @@ float half_to_float(half h) {
     float result = (1.0f + mantissa / 1024.0f) * pow(2, exponent - 15);
     return sign ? -result : result;
 
+}
+
+inline float get_fp32_from_uint32(uint32_t data, bool high) {
+    uint16_t fp16 = high ? (data >> 16) : (data & 0xFFFF);
+    return half_to_float(fp16);
 }
 
 // For VLEN = 256

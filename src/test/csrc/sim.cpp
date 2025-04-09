@@ -72,6 +72,9 @@ void display(){
         // fp32_print(Sim_IO.vs2, VLEN);
         printf("vd:\n");
         fp32_print(&Sim_IO.vd, XLEN);
+        printf("\n");
+        // printf("expected vd:\n");
+        // printf("%12.4f\n", Sim_IO.expected_vd);
     }
     else if(top->io_fp_format == 1){
         printf("---------new sample-----------\n");
@@ -80,7 +83,9 @@ void display(){
         // printf("vs2:\n");
         // fp16_print(Sim_IO.vs2, VLEN);
         printf("vd:\n");
-        fp16_print(&Sim_IO.vd, XLEN);
+        fp16_print(&Sim_IO.vd, 32);
+        // printf("\nexpected vd:\n");
+        // printf("%20.4f\n", Sim_IO.expected_vd);
     }
 
 }
@@ -110,7 +115,7 @@ void gen_rand_vctrl() {
 
     Sim_IO.is_vfredsum = 1;
     Sim_IO.is_vfredmax = 0;
-    Sim_IO.vlmul = 1;
+    Sim_IO.vlmul = 3;
     Sim_IO.round_mode = 0;
     Sim_IO.fp_format = 1;
     Sim_IO.is_vec = 1;
@@ -125,17 +130,9 @@ void gen_rand_vctrl() {
     top->io_is_vec = Sim_IO.is_vec;
     top->io_index = Sim_IO.index;
 
-    
-
 }
 
 void get_expected_result() {
-    float acc = *(float*)&Sim_IO.vs2[0];  
-
-    printf("vs1:\n");
-    fp32_print(Sim_IO.vs1, VLEN);
-    printf("vs2:\n");
-    printf("%12.4f\n", *(float*)&Sim_IO.vs2[0]);
 
     int vlmul;
     switch (Sim_IO.vlmul)
@@ -145,17 +142,49 @@ void get_expected_result() {
     case 0: vlmul = 1; break;
     default: vlmul = 0; break;
     }
+    
+    if(Sim_IO.fp_format == 2){
+        float acc = *(float*)&Sim_IO.vs2[0];  
 
-    for (int j = 0; j < vlmul; j++) {
-        for (int i = 0; i < VLEN / XLEN; i++) {
-            acc += *(float*)&Sim_IO.vs1[i];
+        printf("vs1:\n");
+        fp32_print(Sim_IO.vs1, VLEN);
+        printf("vs2:\n");
+        printf("%12.4f\n", *(float*)&Sim_IO.vs2[0]);
+
+        for (int j = 0; j < vlmul; j++) {
+            for (int i = 0; i < VLEN / 32; i++) {
+                acc += *(float*)&Sim_IO.vs1[i];
+            }
         }
+        Sim_IO.expected_vd = *(uint32_t*)&acc;
+        printf("%12.4f\n", acc);
+
+    }
+    else if(Sim_IO.fp_format == 1){
+        uint16_t low_fp16 = (uint16_t)(Sim_IO.vs2[0] & 0xFFFF);
+        float acc = half_to_float(low_fp16);  
+
+        printf("vs1:\n");
+        fp16_print(Sim_IO.vs1, VLEN);
+        printf("vs2:\n");
+        printf("%12.4f\n", acc);
+
+        uint16_t fp16[VLEN/16];
+        memcpy(fp16, Sim_IO.vs1, VLEN/16 * sizeof(uint16_t));
+
+        for (int j = 0; j < vlmul; j++) {
+            for (int i = 0; i < VLEN / 16; i++) {
+            half val = fp16[i];
+
+            float fp16 = half_to_float(val);
+            acc = acc + fp16;
+            }
+        }
+        Sim_IO.expected_vd = *(uint32_t*)&acc;
+        printf("expected vd:\n");
+        printf("%12.4f\n", acc);
     }
 
-    Sim_IO.expected_vd = *(uint32_t*)&acc;
-
-    printf("\nexpected vd:\n");
-    printf("%20.4f\n", acc);
 }
 
 
@@ -168,12 +197,15 @@ void gen_rand_input() {
     // uint32_t fp32_b;     
     // memcpy(&fp32_b, &val_b, sizeof(float));
     
-    uint32_t val = (0x3C00 << 16) | 0x3C00;
+    uint16_t val_a = 0x4000;
+    uint16_t val_b = 0x4200;
+    uint32_t fp16_a = (val_a << 16) | val_a;
+    uint32_t fp16_b = (val_b << 16) | val_b;
 
     gen_rand_vctrl();
     for(int i = 0; i < VLEN/XLEN; i++){
-        Sim_IO.vs1[i] = val;
-        Sim_IO.vs2[i] = val;
+        Sim_IO.vs1[i] = fp16_a;
+        Sim_IO.vs2[i] = fp16_b;
     }
     get_expected_result();
 
@@ -315,7 +347,6 @@ void check_result(){
 void get_output() {
     // TODO:
     Sim_IO.vd = top->io_vd;
-  
 }   
 
 void reset(int n) {
