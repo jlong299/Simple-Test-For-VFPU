@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#define VLEN 2048
+#define VLEN 512
 #define XLEN 32
 void single_cycle();
 void reset(int n);

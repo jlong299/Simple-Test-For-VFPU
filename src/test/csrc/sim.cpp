@@ -117,7 +117,7 @@ void gen_rand_vctrl() {
     Sim_IO.is_vfredmax = 0;
     Sim_IO.vlmul = 3;
     Sim_IO.round_mode = 0;
-    Sim_IO.fp_format = 1;
+    Sim_IO.fp_format = 2;
     Sim_IO.is_vec = 1;
     Sim_IO.index = 0;
 
@@ -138,11 +138,12 @@ void get_expected_result() {
     switch (Sim_IO.vlmul)
     {
     case 3: vlmul = 8; break;
+    case 2: vlmul = 4; break;
     case 1: vlmul = 2; break;
     case 0: vlmul = 1; break;
     default: vlmul = 0; break;
     }
-    
+    printf("vlmul: %d\n", vlmul);
     if(Sim_IO.fp_format == 2){
         float acc = *(float*)&Sim_IO.vs2[0];  
 
@@ -157,6 +158,7 @@ void get_expected_result() {
             }
         }
         Sim_IO.expected_vd = *(uint32_t*)&acc;
+        printf("expected vd:\n");
         printf("%12.4f\n", acc);
 
     }
@@ -189,23 +191,35 @@ void get_expected_result() {
 
 
 void gen_rand_input() {
-    // float val_a = 1.0f;               
-    // uint32_t fp32_a;     
-    // memcpy(&fp32_a, &val_a, sizeof(float));
+    float val_a = 12.0f;               
+    uint32_t fp_a;     
+    memcpy(&fp_a, &val_a, sizeof(float));
 
-    // float val_b = 1.1f;               
-    // uint32_t fp32_b;     
-    // memcpy(&fp32_b, &val_b, sizeof(float));
+    float val_b = 11.1f;               
+    uint32_t fp_b;     
+    memcpy(&fp_b, &val_b, sizeof(float));
     
-    uint16_t val_a = 0x4000;
-    uint16_t val_b = 0x4200;
-    uint32_t fp16_a = (val_a << 16) | val_a;
-    uint32_t fp16_b = (val_b << 16) | val_b;
+    // 数值 (Decimal)	FP16 二进制	十六进制 (Hex)
+    // 1.0	0 01111 0000000000	0x3C00
+    // 2.0	0 10000 0000000000	0x4000
+    // 3.0	0 10000 1000000000	0x4200
+    // 4.0	0 10001 0000000000	0x4400
+    // 5.0	0 10001 0100000000	0x4560
+    // 6.0	0 10001 1000000000	0x4600
+    // 7.0	0 10001 1100000000	0x46E0
+    // 8.0	0 10010 0000000000	0x4800
+    // 9.0	0 10010 0010000000	0x48A0
+    // 10.0	0 10010 0100000000	0x4900
+
+    // uint16_t val_a = 0x48A0;
+    // uint16_t val_b = 0x4000;
+    // uint32_t fp_a = (val_a << 16) | val_a;
+    // uint32_t fp_b = (val_b << 16) | val_b;
 
     gen_rand_vctrl();
     for(int i = 0; i < VLEN/XLEN; i++){
-        Sim_IO.vs1[i] = fp16_a;
-        Sim_IO.vs2[i] = fp16_b;
+        Sim_IO.vs1[i] = fp_a;
+        Sim_IO.vs2[i] = fp_b;
     }
     get_expected_result();
 
@@ -225,54 +239,54 @@ void gen_rand_input() {
     top->io_vs2_13 = Sim_IO.vs2[13];
     top->io_vs2_14 = Sim_IO.vs2[14];
     top->io_vs2_15 = Sim_IO.vs2[15];
-    top->io_vs2_16 = Sim_IO.vs2[16];
-    top->io_vs2_17 = Sim_IO.vs2[17];
-    top->io_vs2_18 = Sim_IO.vs2[18];
-    top->io_vs2_19 = Sim_IO.vs2[19];
-    top->io_vs2_20 = Sim_IO.vs2[20];
-    top->io_vs2_21 = Sim_IO.vs2[21];
-    top->io_vs2_22 = Sim_IO.vs2[22];
-    top->io_vs2_23 = Sim_IO.vs2[23];
-    top->io_vs2_24 = Sim_IO.vs2[24];
-    top->io_vs2_25 = Sim_IO.vs2[25];
-    top->io_vs2_26 = Sim_IO.vs2[26];
-    top->io_vs2_27 = Sim_IO.vs2[27];
-    top->io_vs2_28 = Sim_IO.vs2[28];
-    top->io_vs2_29 = Sim_IO.vs2[29];
-    top->io_vs2_30 = Sim_IO.vs2[30];
-    top->io_vs2_31 = Sim_IO.vs2[31];
-    top->io_vs2_32 = Sim_IO.vs2[32];
-    top->io_vs2_33 = Sim_IO.vs2[33];
-    top->io_vs2_34 = Sim_IO.vs2[34];
-    top->io_vs2_35 = Sim_IO.vs2[35];
-    top->io_vs2_36 = Sim_IO.vs2[36];
-    top->io_vs2_37 = Sim_IO.vs2[37];
-    top->io_vs2_38 = Sim_IO.vs2[38];
-    top->io_vs2_39 = Sim_IO.vs2[39];
-    top->io_vs2_40 = Sim_IO.vs2[40];
-    top->io_vs2_41 = Sim_IO.vs2[41];
-    top->io_vs2_42 = Sim_IO.vs2[42];
-    top->io_vs2_43 = Sim_IO.vs2[43];
-    top->io_vs2_44 = Sim_IO.vs2[44];
-    top->io_vs2_45 = Sim_IO.vs2[45];
-    top->io_vs2_46 = Sim_IO.vs2[46];
-    top->io_vs2_47 = Sim_IO.vs2[47];
-    top->io_vs2_48 = Sim_IO.vs2[48];
-    top->io_vs2_49 = Sim_IO.vs2[49];
-    top->io_vs2_50 = Sim_IO.vs2[50];
-    top->io_vs2_51 = Sim_IO.vs2[51];
-    top->io_vs2_52 = Sim_IO.vs2[52];
-    top->io_vs2_53 = Sim_IO.vs2[53];
-    top->io_vs2_54 = Sim_IO.vs2[54];
-    top->io_vs2_55 = Sim_IO.vs2[55];
-    top->io_vs2_56 = Sim_IO.vs2[56];
-    top->io_vs2_57 = Sim_IO.vs2[57];
-    top->io_vs2_58 = Sim_IO.vs2[58];
-    top->io_vs2_59 = Sim_IO.vs2[59];
-    top->io_vs2_60 = Sim_IO.vs2[60];
-    top->io_vs2_61 = Sim_IO.vs2[61];
-    top->io_vs2_62 = Sim_IO.vs2[62];
-    top->io_vs2_63 = Sim_IO.vs2[63];
+    // top->io_vs2_16 = Sim_IO.vs2[16];
+    // top->io_vs2_17 = Sim_IO.vs2[17];
+    // top->io_vs2_18 = Sim_IO.vs2[18];
+    // top->io_vs2_19 = Sim_IO.vs2[19];
+    // top->io_vs2_20 = Sim_IO.vs2[20];
+    // top->io_vs2_21 = Sim_IO.vs2[21];
+    // top->io_vs2_22 = Sim_IO.vs2[22];
+    // top->io_vs2_23 = Sim_IO.vs2[23];
+    // top->io_vs2_24 = Sim_IO.vs2[24];
+    // top->io_vs2_25 = Sim_IO.vs2[25];
+    // top->io_vs2_26 = Sim_IO.vs2[26];
+    // top->io_vs2_27 = Sim_IO.vs2[27];
+    // top->io_vs2_28 = Sim_IO.vs2[28];
+    // top->io_vs2_29 = Sim_IO.vs2[29];
+    // top->io_vs2_30 = Sim_IO.vs2[30];
+    // top->io_vs2_31 = Sim_IO.vs2[31];
+    // top->io_vs2_32 = Sim_IO.vs2[32];
+    // top->io_vs2_33 = Sim_IO.vs2[33];
+    // top->io_vs2_34 = Sim_IO.vs2[34];
+    // top->io_vs2_35 = Sim_IO.vs2[35];
+    // top->io_vs2_36 = Sim_IO.vs2[36];
+    // top->io_vs2_37 = Sim_IO.vs2[37];
+    // top->io_vs2_38 = Sim_IO.vs2[38];
+    // top->io_vs2_39 = Sim_IO.vs2[39];
+    // top->io_vs2_40 = Sim_IO.vs2[40];
+    // top->io_vs2_41 = Sim_IO.vs2[41];
+    // top->io_vs2_42 = Sim_IO.vs2[42];
+    // top->io_vs2_43 = Sim_IO.vs2[43];
+    // top->io_vs2_44 = Sim_IO.vs2[44];
+    // top->io_vs2_45 = Sim_IO.vs2[45];
+    // top->io_vs2_46 = Sim_IO.vs2[46];
+    // top->io_vs2_47 = Sim_IO.vs2[47];
+    // top->io_vs2_48 = Sim_IO.vs2[48];
+    // top->io_vs2_49 = Sim_IO.vs2[49];
+    // top->io_vs2_50 = Sim_IO.vs2[50];
+    // top->io_vs2_51 = Sim_IO.vs2[51];
+    // top->io_vs2_52 = Sim_IO.vs2[52];
+    // top->io_vs2_53 = Sim_IO.vs2[53];
+    // top->io_vs2_54 = Sim_IO.vs2[54];
+    // top->io_vs2_55 = Sim_IO.vs2[55];
+    // top->io_vs2_56 = Sim_IO.vs2[56];
+    // top->io_vs2_57 = Sim_IO.vs2[57];
+    // top->io_vs2_58 = Sim_IO.vs2[58];
+    // top->io_vs2_59 = Sim_IO.vs2[59];
+    // top->io_vs2_60 = Sim_IO.vs2[60];
+    // top->io_vs2_61 = Sim_IO.vs2[61];
+    // top->io_vs2_62 = Sim_IO.vs2[62];
+    // top->io_vs2_63 = Sim_IO.vs2[63];
     top->io_vs1_0 = Sim_IO.vs1[0];
     top->io_vs1_1 = Sim_IO.vs1[1];
     top->io_vs1_2 = Sim_IO.vs1[2];
@@ -289,54 +303,54 @@ void gen_rand_input() {
     top->io_vs1_13 = Sim_IO.vs1[13];
     top->io_vs1_14 = Sim_IO.vs1[14];
     top->io_vs1_15 = Sim_IO.vs1[15];
-    top->io_vs1_16 = Sim_IO.vs1[16];
-    top->io_vs1_17 = Sim_IO.vs1[17];
-    top->io_vs1_18 = Sim_IO.vs1[18];
-    top->io_vs1_19 = Sim_IO.vs1[19];
-    top->io_vs1_20 = Sim_IO.vs1[20];
-    top->io_vs1_21 = Sim_IO.vs1[21];
-    top->io_vs1_22 = Sim_IO.vs1[22];
-    top->io_vs1_23 = Sim_IO.vs1[23];
-    top->io_vs1_24 = Sim_IO.vs1[24];
-    top->io_vs1_25 = Sim_IO.vs1[25];
-    top->io_vs1_26 = Sim_IO.vs1[26];
-    top->io_vs1_27 = Sim_IO.vs1[27];
-    top->io_vs1_28 = Sim_IO.vs1[28];
-    top->io_vs1_29 = Sim_IO.vs1[29];
-    top->io_vs1_30 = Sim_IO.vs1[30];
-    top->io_vs1_31 = Sim_IO.vs1[31];
-    top->io_vs1_32 = Sim_IO.vs1[32];
-    top->io_vs1_33 = Sim_IO.vs1[33];
-    top->io_vs1_34 = Sim_IO.vs1[34];
-    top->io_vs1_35 = Sim_IO.vs1[35];
-    top->io_vs1_36 = Sim_IO.vs1[36];
-    top->io_vs1_37 = Sim_IO.vs1[37];
-    top->io_vs1_38 = Sim_IO.vs1[38];
-    top->io_vs1_39 = Sim_IO.vs1[39];
-    top->io_vs1_40 = Sim_IO.vs1[40];
-    top->io_vs1_41 = Sim_IO.vs1[41];
-    top->io_vs1_42 = Sim_IO.vs1[42];
-    top->io_vs1_43 = Sim_IO.vs1[43];
-    top->io_vs1_44 = Sim_IO.vs1[44];
-    top->io_vs1_45 = Sim_IO.vs1[45];
-    top->io_vs1_46 = Sim_IO.vs1[46];
-    top->io_vs1_47 = Sim_IO.vs1[47];
-    top->io_vs1_48 = Sim_IO.vs1[48];
-    top->io_vs1_49 = Sim_IO.vs1[49];
-    top->io_vs1_50 = Sim_IO.vs1[50];
-    top->io_vs1_51 = Sim_IO.vs1[51];
-    top->io_vs1_52 = Sim_IO.vs1[52];
-    top->io_vs1_53 = Sim_IO.vs1[53];
-    top->io_vs1_54 = Sim_IO.vs1[54];
-    top->io_vs1_55 = Sim_IO.vs1[55];
-    top->io_vs1_56 = Sim_IO.vs1[56];
-    top->io_vs1_57 = Sim_IO.vs1[57];
-    top->io_vs1_58 = Sim_IO.vs1[58];
-    top->io_vs1_59 = Sim_IO.vs1[59];
-    top->io_vs1_60 = Sim_IO.vs1[60];
-    top->io_vs1_61 = Sim_IO.vs1[61];
-    top->io_vs1_62 = Sim_IO.vs1[62];
-    top->io_vs1_63 = Sim_IO.vs1[63];
+    // top->io_vs1_16 = Sim_IO.vs1[16];
+    // top->io_vs1_17 = Sim_IO.vs1[17];
+    // top->io_vs1_18 = Sim_IO.vs1[18];
+    // top->io_vs1_19 = Sim_IO.vs1[19];
+    // top->io_vs1_20 = Sim_IO.vs1[20];
+    // top->io_vs1_21 = Sim_IO.vs1[21];
+    // top->io_vs1_22 = Sim_IO.vs1[22];
+    // top->io_vs1_23 = Sim_IO.vs1[23];
+    // top->io_vs1_24 = Sim_IO.vs1[24];
+    // top->io_vs1_25 = Sim_IO.vs1[25];
+    // top->io_vs1_26 = Sim_IO.vs1[26];
+    // top->io_vs1_27 = Sim_IO.vs1[27];
+    // top->io_vs1_28 = Sim_IO.vs1[28];
+    // top->io_vs1_29 = Sim_IO.vs1[29];
+    // top->io_vs1_30 = Sim_IO.vs1[30];
+    // top->io_vs1_31 = Sim_IO.vs1[31];
+    // top->io_vs1_32 = Sim_IO.vs1[32];
+    // top->io_vs1_33 = Sim_IO.vs1[33];
+    // top->io_vs1_34 = Sim_IO.vs1[34];
+    // top->io_vs1_35 = Sim_IO.vs1[35];
+    // top->io_vs1_36 = Sim_IO.vs1[36];
+    // top->io_vs1_37 = Sim_IO.vs1[37];
+    // top->io_vs1_38 = Sim_IO.vs1[38];
+    // top->io_vs1_39 = Sim_IO.vs1[39];
+    // top->io_vs1_40 = Sim_IO.vs1[40];
+    // top->io_vs1_41 = Sim_IO.vs1[41];
+    // top->io_vs1_42 = Sim_IO.vs1[42];
+    // top->io_vs1_43 = Sim_IO.vs1[43];
+    // top->io_vs1_44 = Sim_IO.vs1[44];
+    // top->io_vs1_45 = Sim_IO.vs1[45];
+    // top->io_vs1_46 = Sim_IO.vs1[46];
+    // top->io_vs1_47 = Sim_IO.vs1[47];
+    // top->io_vs1_48 = Sim_IO.vs1[48];
+    // top->io_vs1_49 = Sim_IO.vs1[49];
+    // top->io_vs1_50 = Sim_IO.vs1[50];
+    // top->io_vs1_51 = Sim_IO.vs1[51];
+    // top->io_vs1_52 = Sim_IO.vs1[52];
+    // top->io_vs1_53 = Sim_IO.vs1[53];
+    // top->io_vs1_54 = Sim_IO.vs1[54];
+    // top->io_vs1_55 = Sim_IO.vs1[55];
+    // top->io_vs1_56 = Sim_IO.vs1[56];
+    // top->io_vs1_57 = Sim_IO.vs1[57];
+    // top->io_vs1_58 = Sim_IO.vs1[58];
+    // top->io_vs1_59 = Sim_IO.vs1[59];
+    // top->io_vs1_60 = Sim_IO.vs1[60];
+    // top->io_vs1_61 = Sim_IO.vs1[61];
+    // top->io_vs1_62 = Sim_IO.vs1[62];
+    // top->io_vs1_63 = Sim_IO.vs1[63];
 
     top->io_vs2_0 = Sim_IO.vs2[0];
 }

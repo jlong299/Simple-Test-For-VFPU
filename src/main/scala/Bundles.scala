@@ -4,7 +4,7 @@ import chisel3._
 import chisel3.util._
 
 trait Params {
-    val VLEN = 2048
+    val VLEN = 512
     val XLEN = 32
 }
 
