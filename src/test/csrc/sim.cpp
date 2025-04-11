@@ -125,6 +125,7 @@ void gen_rand_vctrl() {
     top->io_is_vfredsum = Sim_IO.is_vfredsum;
     top->io_is_vfredmax = Sim_IO.is_vfredmax;
     top->io_vlmul = Sim_IO.vlmul;
+    top->io_opcode = 0x0;
     top->io_round_mode = Sim_IO.round_mode;
     top->io_fp_format = Sim_IO.fp_format;
     top->io_is_vec = Sim_IO.is_vec;
@@ -208,11 +209,11 @@ void gen_rand_input() {
     // 6.0	0 10001 1000000000	0x4600
     // 7.0	0 10001 1100000000	0x46E0
     // 8.0	0 10010 0000000000	0x4800
-    // 9.0	0 10010 0010000000	0x48A0
+    // 9.0	0 10010 0010000000	0x3C00
     // 10.0	0 10010 0100000000	0x4900
 
-    // uint16_t val_a = 0x48A0;
-    // uint16_t val_b = 0x4000;
+    // uint16_t val_a = 0x4900;
+    // uint16_t val_b = 0x4600;
     // uint32_t fp_a = (val_a << 16) | val_a;
     // uint32_t fp_b = (val_b << 16) | val_b;
 
@@ -371,20 +372,22 @@ void reset(int n) {
 }
 
 void sim_main(int argc, char *argv[]) {
-    int max_cycles = 100;  
+    int max_cycles = 20;  
     sim_init(argc, argv);
     reset(10);
     gen_rand_input();
     single_cycle();
     /* main loop */
     while (max_cycles--) {
-        if(top->io_finish){
-            break;
-        }
-        else{
-            index_acum();
-            single_cycle();
-        }
+        // if(top->io_finish){
+        //     break;
+        // }
+        // else{
+        //     index_acum();
+        //     single_cycle();
+        // }
+        index_acum();
+        single_cycle();
     }
     get_output();
     display();
