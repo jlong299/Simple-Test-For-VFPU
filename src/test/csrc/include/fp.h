@@ -78,6 +78,29 @@ void fp16_print(uint32_t *src, uint32_t vlen){
     }
 }
 
+float bf16_to_float(uint16_t bf16_val) {
+    uint32_t temp = ((uint32_t)bf16_val) << 16;
+    float result;
+    memcpy(&result, &temp, sizeof(result));
+    return result;
+}
+
+void bf16_print(uint32_t *src, uint32_t vlen){
+    if (src == NULL) {
+        printf("Error: Null pointer passed to bf16_print\n");
+        return;
+    }
+    for (int j = vlen/32 -1; j >= 0; j--){
+        for(int k = 32/16 - 1; k >= 0; k--){
+            uint16_t bf16 = (src[j] >> (16 * k)) & 0xffff;
+            printf("%12.4f ", bf16_to_float(bf16));
+        }
+        if(j % 4 == 0){
+            printf("\n");
+        }
+    }
+}
+
 void uint64_print(uint64_t *src, uint64_t vlen, uint64_t xlen){
     if (src == NULL) {
         printf("Error: Null pointer passed to fp16_print\n");

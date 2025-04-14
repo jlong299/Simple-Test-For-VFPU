@@ -87,7 +87,18 @@ void display(){
         // printf("\nexpected vd:\n");
         // printf("%20.4f\n", Sim_IO.expected_vd);
     }
-
+    else if(top->io_fp_format == 0){
+        printf("---------new sample-----------\n");
+        // printf("vs1:\n");
+        // fp16_print(Sim_IO.vs1, VLEN);
+        // printf("vs2:\n");
+        // fp16_print(Sim_IO.vs2, VLEN);
+        printf("vd:\n");
+        bf16_print(&Sim_IO.vd, 32);
+        printf("vd16hex:%x\n", Sim_IO.vd);
+        // printf("\nexpected vd:\n");
+        // printf("%20.4f\n", Sim_IO.expected_vd);
+    }
 }
 
 void single_cycle() {
@@ -117,7 +128,7 @@ void gen_rand_vctrl() {
     Sim_IO.is_vfredmax = 0;
     Sim_IO.vlmul = 3;
     Sim_IO.round_mode = 0;
-    Sim_IO.fp_format = 2;
+    Sim_IO.fp_format = 0;
     Sim_IO.is_vec = 1;
     Sim_IO.index = 0;
 
@@ -146,18 +157,13 @@ void get_expected_result() {
     }
     printf("vlmul: %d\n", vlmul);
     if(Sim_IO.fp_format == 2){
-        float acc = *(float*)&Sim_IO.vs2[0];  
+        float acc = (*(float*)&Sim_IO.vs2[0]) * (*(float*)&Sim_IO.vs1[0]);  
 
         printf("vs1:\n");
         fp32_print(Sim_IO.vs1, VLEN);
         printf("vs2:\n");
         printf("%12.4f\n", *(float*)&Sim_IO.vs2[0]);
 
-        for (int j = 0; j < vlmul; j++) {
-            for (int i = 0; i < VLEN / 32; i++) {
-                acc += *(float*)&Sim_IO.vs1[i];
-            }
-        }
         Sim_IO.expected_vd = *(uint32_t*)&acc;
         printf("expected vd:\n");
         printf("%12.4f\n", acc);
@@ -192,13 +198,13 @@ void get_expected_result() {
 
 
 void gen_rand_input() {
-    float val_a = 12.0f;               
-    uint32_t fp_a;     
-    memcpy(&fp_a, &val_a, sizeof(float));
+    // float val_a = 124.0f;               
+    // uint32_t fp_a;     
+    // memcpy(&fp_a, &val_a, sizeof(float));
 
-    float val_b = 11.1f;               
-    uint32_t fp_b;     
-    memcpy(&fp_b, &val_b, sizeof(float));
+    // float val_b = 11.112f;               
+    // uint32_t fp_b;     
+    // memcpy(&fp_b, &val_b, sizeof(float));
     
     // 数值 (Decimal)	FP16 二进制	十六进制 (Hex)
     // 1.0	0 01111 0000000000	0x3C00
@@ -212,10 +218,26 @@ void gen_rand_input() {
     // 9.0	0 10010 0010000000	0x3C00
     // 10.0	0 10010 0100000000	0x4900
 
-    // uint16_t val_a = 0x4900;
-    // uint16_t val_b = 0x4600;
-    // uint32_t fp_a = (val_a << 16) | val_a;
-    // uint32_t fp_b = (val_b << 16) | val_b;
+    // BF16 (Hex)	对应 float 值	说明
+    // 0x0000	0.0	零
+    // 0x3f80	1.0	常用单位值
+    // 0x4000	2.0	常用整数
+    // 0x4040	3.0	常用整数
+    // 0x4080	4.0	常用整数
+    // 0x3f00	0.5	一半
+    // 0x3e80	0.25	四分之一
+    // 0x3c00	0.0625	十六分之一
+    // 0x7f80	+Infinity	正无穷
+    // 0xff80	-Infinity	负无穷
+    // 0x7fc0	NaN	非数（NaN）
+    // 0xbf80	-1.0	负一
+    // 0xc000	-2.0	负二
+
+    uint16_t val_a = 0x7f80;
+    uint16_t val_b = 0xc000;
+    uint32_t fp_a = (val_a << 16) | val_a;
+    uint32_t fp_b = (val_b << 16) | val_b;
+
 
     gen_rand_vctrl();
     for(int i = 0; i < VLEN/XLEN; i++){

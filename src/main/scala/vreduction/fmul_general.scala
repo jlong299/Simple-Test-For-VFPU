@@ -401,3 +401,4 @@ class GFloatFMA() extends Module with Params {
   )
 
 }
+

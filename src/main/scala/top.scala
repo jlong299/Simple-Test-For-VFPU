@@ -27,25 +27,23 @@ class top extends Module with Params{
 
     val vd  = Output(UInt(XLEN.W))
     val fflags  = Output(UInt(5.W))
-    val right_vd  = Output(UInt(64.W))
-    val right_fflags  = Output(UInt(5.W))
   })
 
-  val mix_fmul = Module(new RIGHT_FloatFMA)
-  mix_fmul.io.fire := io.fire
-  mix_fmul.io.fp_a := Cat(0.U((64-32).W), io.vs1(0)(32-1, 0))
-  mix_fmul.io.fp_b := Cat(0.U((64-32).W), io.vs2(0)(32-1, 0))
-  mix_fmul.io.fp_c := 0.U
+  // val mix_fmul = Module(new RIGHT_FloatFMA)
+  // mix_fmul.io.fire := io.fire
+  // mix_fmul.io.fp_a := Cat(0.U((64-32).W), io.vs1(0)(32-1, 0))
+  // mix_fmul.io.fp_b := Cat(0.U((64-32).W), io.vs2(0)(32-1, 0))
+  // mix_fmul.io.fp_c := 0.U
 
-  mix_fmul.io.round_mode := io.round_mode
-  mix_fmul.io.fp_format := io.fp_format
-  mix_fmul.io.op_code := io.opcode
-  mix_fmul.io.fp_aIsFpCanonicalNAN := 0.U 
-  mix_fmul.io.fp_bIsFpCanonicalNAN := 0.U 
-  mix_fmul.io.fp_cIsFpCanonicalNAN := 0.U 
+  // mix_fmul.io.round_mode := io.round_mode
+  // mix_fmul.io.fp_format := io.fp_format
+  // mix_fmul.io.op_code := io.opcode
+  // mix_fmul.io.fp_aIsFpCanonicalNAN := 0.U 
+  // mix_fmul.io.fp_bIsFpCanonicalNAN := 0.U 
+  // mix_fmul.io.fp_cIsFpCanonicalNAN := 0.U 
 
-  io.right_vd := mix_fmul.io.fp_result  
-  io.right_fflags := mix_fmul.io.fflags
+  // io.right_vd := mix_fmul.io.fp_result  
+  // io.right_fflags := mix_fmul.io.fflags
 
   val fmul = Module(new GFloatFMA)
   fmul.io.fire := io.fire
