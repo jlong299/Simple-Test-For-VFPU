@@ -198,13 +198,13 @@ void get_expected_result() {
 
 
 void gen_rand_input() {
-    // float val_a = 124.0f;               
-    // uint32_t fp_a;     
-    // memcpy(&fp_a, &val_a, sizeof(float));
+    float val_a = 124.0f;               
+    uint32_t fp_a;     
+    memcpy(&fp_a, &val_a, sizeof(float));
 
-    // float val_b = 11.112f;               
-    // uint32_t fp_b;     
-    // memcpy(&fp_b, &val_b, sizeof(float));
+    float val_b = 11.112f;               
+    uint32_t fp_b;     
+    memcpy(&fp_b, &val_b, sizeof(float));
     
     // 数值 (Decimal)	FP16 二进制	十六进制 (Hex)
     // 1.0	0 01111 0000000000	0x3C00
@@ -233,10 +233,10 @@ void gen_rand_input() {
     // 0xbf80	-1.0	负一
     // 0xc000	-2.0	负二
 
-    uint16_t val_a = 0x7f80;
-    uint16_t val_b = 0xc000;
-    uint32_t fp_a = (val_a << 16) | val_a;
-    uint32_t fp_b = (val_b << 16) | val_b;
+    // uint16_t val_a = 0x7f80;
+    // uint16_t val_b = 0xc000;
+    // uint32_t fp_a = (val_a << 16) | val_a;
+    // uint32_t fp_b = (val_b << 16) | val_b;
 
 
     gen_rand_vctrl();

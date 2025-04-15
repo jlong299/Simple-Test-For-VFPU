@@ -13,7 +13,7 @@ class GFloatFMA() extends Module with Params {
     val fire                 = Input (Bool())
     val fp_a, fp_b, fp_c     = Input (UInt(floatWidth.W))  // fp_a->VS2,fp_b->VS1,fp_c->VD
     val round_mode           = Input (UInt(3.W))
-    val fp_format            = Input (UInt(2.W)) // result format b01->fp16,b10->fp32,b11->fp64
+    val fp_format            = Input (UInt(2.W))
     val op_code              = Input (UInt(4.W))
     val fp_result            = Output(UInt(floatWidth.W))
     val fflags               = Output(UInt(5.W))

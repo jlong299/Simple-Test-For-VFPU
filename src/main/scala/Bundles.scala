@@ -7,7 +7,7 @@ trait Params {
     val VLEN = 512
     val XLEN = 32
     val exponentWidth : Int = 8
-    val significandWidth : Int = 8
+    val significandWidth : Int = 24
     val floatWidth = exponentWidth + significandWidth
 }
 
