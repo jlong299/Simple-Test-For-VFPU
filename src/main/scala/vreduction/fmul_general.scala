@@ -8,6 +8,17 @@ import vector._
 import scala.collection.mutable.ListBuffer
 import Vreduction._
 
+object FmaOpCode {
+  def width = 4
+
+  def fmul    = "b0000".U(width.W)
+  def fmacc   = "b0001".U(width.W)
+  def fmsac   = "b0011".U(width.W)
+  def fnmacc  = "b0010".U(width.W)
+  def fnmsac  = "b0100".U(width.W)
+}
+
+
 class GFloatFMA() extends Module with Params {
   val io = IO(new Bundle() {
     val fire                 = Input (Bool())
@@ -74,7 +85,6 @@ class GFloatFMA() extends Module with Params {
   val is_fp_reg1            = RegEnable(is_fp_reg0, fire_reg0)
   val is_fp_reg2            = RegEnable(is_fp_reg1, fire_reg1)
 
-  //??
   val rshiftBasic          = significandWidth + 3
   val rshiftMax            = 3*significandWidth + 4
 
@@ -201,6 +211,7 @@ class GFloatFMA() extends Module with Params {
   ) + 1.U(1.W)
 
 
+  //
   val fp_c_rshift_result_high_inv_add1_fp = fp_c_rshift_result_high_inv_add1(significandWidth+2,0)
 
   val adder       = Cat(Mux(adder_lowbit.head(1).asBool, fp_c_rshift_result_high_inv_add1_fp, fp_c_rshift_result_high_inv_add0),adder_lowbit.tail(1),
@@ -400,5 +411,195 @@ class GFloatFMA() extends Module with Params {
       0.U
   )
 
+}
+
+// class CSA_Nto2With3to2MainPipeline(n :Int, width :Int, pipeLevel :Int) extends Module{
+//   val io = IO(new Bundle() {
+//     val fire    = Input(Bool())
+//     val in      = Input(Vec(n,UInt(width.W)))
+//     val out_sum = Output(UInt(width.W))
+//     val out_car = Output(UInt(width.W))
+
+//   })
+//   val fire = io.fire
+//   val in = ListBuffer[UInt]()
+//   io.in.foreach(a => in += a)
+//   val in_next = ListBuffer[UInt]()
+//   var n_next = n
+//   var CSA4to2Num = if(n_next==8 || n_next==4) n_next/4 else 0
+//   var CSA3to2Num = if(n_next==8 || n_next==4) 0 else n_next/3
+//   var remainder = n_next - CSA4to2Num*4 - CSA3to2Num*3
+
+//   var ceng = 0
+//   var is_piped = false
+//   while (CSA4to2Num!=0 || CSA3to2Num!=0){
+//     ceng = ceng + 1
+
+//     if (ceng == pipeLevel) is_piped = true
+
+//     in_next.remove(0,in_next.length)
+//     for (i <- 0 until CSA4to2Num) {
+//       val U_CSA4to2 = Module(new CSA4to2(width = width))
+//       U_CSA4to2.io.in_a := (if (is_piped) RegEnable(in(i*4+0), fire) else in(i*4+0))
+//       U_CSA4to2.io.in_b := (if (is_piped) RegEnable(in(i*4+1), fire) else in(i*4+1))
+//       U_CSA4to2.io.in_c := (if (is_piped) RegEnable(in(i*4+2), fire) else in(i*4+2))
+//       U_CSA4to2.io.in_d := (if (is_piped) RegEnable(in(i*4+3), fire) else in(i*4+3))
+//       in_next += U_CSA4to2.io.out_sum
+//       in_next += U_CSA4to2.io.out_car
+//     }
+//     for (i <- 0 until CSA3to2Num) {
+//       val U_CSA3to2 = Module(new CSA3to2(width = width))
+//       U_CSA3to2.io.in_a := (if (is_piped) RegEnable(in(i*3+0), fire) else in(i*3+0))
+//       U_CSA3to2.io.in_b := (if (is_piped) RegEnable(in(i*3+1), fire) else in(i*3+1))
+//       U_CSA3to2.io.in_c := (if (is_piped) RegEnable(in(i*3+2), fire) else in(i*3+2))
+//       in_next += U_CSA3to2.io.out_sum
+//       in_next += U_CSA3to2.io.out_car
+//     }
+
+//     if (remainder == 1) in_next += in.last
+//     if (remainder == 2) {
+//       in_next += in(in.length-2)
+//       in_next += in.last
+//     }
+//     in.remove(0,in.length)
+//     in_next.foreach(a => in += a)
+//     n_next = (CSA4to2Num+CSA3to2Num)*2 + remainder
+//     CSA4to2Num = if(n_next==8 || n_next==4) n_next/4 else 0
+//     CSA3to2Num = if(n_next==8 || n_next==4) 0 else n_next/3
+//     remainder = n_next - CSA4to2Num*4 - CSA3to2Num*3
+//   }
+
+//   io.out_sum := (if (pipeLevel>ceng) RegEnable(in_next(0), fire) else in_next(0))
+//   io.out_car := (if (pipeLevel>ceng) RegEnable(in_next(1), fire) else in_next(1))
+
+
+
+// }
+
+// class CSA3to2(width :Int) extends Module{
+//   val io = IO(new Bundle() {
+//     val in_a   = Input(UInt(width.W))
+//     val in_b   = Input(UInt(width.W))
+//     val in_c   = Input(UInt(width.W))
+//     val out_sum = Output(UInt(width.W))
+//     val out_car = Output(UInt(width.W))
+
+//   })
+//   io.out_sum := io.in_a ^ io.in_b ^ io.in_c
+//   io.out_car := Cat( ( (io.in_a & io.in_b) | (io.in_a & io.in_c) | (io.in_b & io.in_c) )(width-2,0),0.U)
+
+
+
+// }
+// class CSA4to2(width :Int) extends Module{
+//   val io = IO(new Bundle() {
+//     val in_a   = Input(UInt(width.W))
+//     val in_b   = Input(UInt(width.W))
+//     val in_c   = Input(UInt(width.W))
+//     val in_d   = Input(UInt(width.W))
+//     val out_sum = Output(UInt(width.W))
+//     val out_car = Output(UInt(width.W))
+
+//   })
+//   val cout_vec  = Wire(Vec(width,UInt(1.W)))
+//   val sum_vec   = Wire(Vec(width,UInt(1.W)))
+//   val carry_vec = Wire(Vec(width,UInt(1.W)))
+//   val cin = 0.U
+//   for (i <- 0 until width) {
+//     cout_vec(i) := Mux(io.in_a(i) ^ io.in_b(i), io.in_c(i), io.in_a(i))
+//     if (i ==0){
+//       sum_vec(i)   := io.in_a(i) ^ io.in_b(i) ^ io.in_c(i) ^ io.in_d(i)
+//       carry_vec(i) := Mux(io.in_a(i) ^ io.in_b(i) ^ io.in_c(i) ^ io.in_d(i), cin , io.in_d(i))
+//     }
+//     else {
+//       sum_vec(i)   :=  io.in_a(i) ^ io.in_b(i) ^ io.in_c(i) ^ io.in_d(i) ^ cout_vec(i-1)
+//       carry_vec(i) := Mux(io.in_a(i) ^ io.in_b(i) ^ io.in_c(i) ^ io.in_d(i), cout_vec(i-1), io.in_d(i))
+//     }
+//   }
+
+//   val sum_temp_vec   = Wire(Vec(width,UInt(1.W)))
+//   val carry_temp_vec = Wire(Vec(width,UInt(1.W)))
+//   carry_temp_vec(0) := 0.U
+//   sum_temp_vec(0)   := sum_vec(0)
+//   for (i <- 1 until width) {
+//     if (i%2==1) {
+//       carry_temp_vec(i) := sum_vec(i)
+//       sum_temp_vec(i)   := carry_vec(i-1)
+//     }
+//     else {
+//       carry_temp_vec(i) := carry_vec(i-1)
+//       sum_temp_vec(i)   := sum_vec(i)
+//     }
+//   }
+
+
+//   io.out_sum := sum_temp_vec.asUInt
+//   io.out_car := carry_temp_vec.asUInt
+
+
+// }
+
+class BoothEncoder(
+                                              width :Int = 53,
+                                              is_addend_expand_1bit : Boolean = true
+                                            ) extends Module{
+  val addend_seq_width = if (is_addend_expand_1bit) 2*width+1 else 2*width
+  val outNum  = width/2 + 1
+  val io = IO(new Bundle() {
+    val in_a   = Input(UInt(width.W))
+    val in_b   = Input(UInt(width.W))
+    val out_pp = Output(Vec(outNum,UInt(addend_seq_width.W)))
+  })
+  val in_b_cat = Cat(Fill(2- (width % 2),0.U),io.in_b,0.U)
+
+  //get booth encode
+  val booth_seq = Wire(Vec(outNum,UInt(3.W)))
+  val booth_4bit_onehot = Wire(Vec(outNum,UInt(4.W)))
+  for (i <- 0 until outNum) {
+    booth_seq(i) := in_b_cat(i*2+2,i*2)
+    booth_4bit_onehot(i) := 0.U
+    switch(booth_seq(i)){
+      is("b001".U) {booth_4bit_onehot(i) := "b1000".U}
+      is("b010".U) {booth_4bit_onehot(i) := "b1000".U}
+      is("b011".U) {booth_4bit_onehot(i) := "b0100".U}
+      is("b100".U) {booth_4bit_onehot(i) := "b0001".U}
+      is("b101".U) {booth_4bit_onehot(i) := "b0010".U}
+      is("b110".U) {booth_4bit_onehot(i) := "b0010".U}
+    }
+  }
+  //generate partial products
+  val pp_seq_f16 = Wire(Vec(outNum,UInt((width+1).W)))
+  val sign_seq = Wire(Vec(outNum,UInt(1.W)))
+  for (i <- 0 until outNum) {
+    sign_seq(i) := booth_4bit_onehot(i)(1) | booth_4bit_onehot(i)(0)
+    //f16
+    pp_seq_f16(i) := Fill(width + 1, booth_4bit_onehot(i)(3)) & Cat(0.U, io.in_a) |
+      Fill(width + 1, booth_4bit_onehot(i)(2)) & Cat(io.in_a, 0.U) |
+      Fill(width + 1, booth_4bit_onehot(i)(1)) & Cat(1.U, ~io.in_a) |
+      Fill(width + 1, booth_4bit_onehot(i)(0)) & Cat(~io.in_a, 1.U)
+  }
+  val addend_seq_f16 = Wire(Vec(outNum,UInt(addend_seq_width.W)))
+  val outNumBeforeLast = outNum-2
+  val outNumLast = outNum-1
+  for (i <- 0 until outNum) {
+    val head_first_one_width = width - 4 - 2 * (i - 1)
+    val tail_zero_width = 2 * (i - 1)
+    i match {
+      case 0 => addend_seq_f16(i) := Cat(0.U((width - 4).W), ~sign_seq(i), sign_seq(i), sign_seq(i), pp_seq_f16(0))
+      case 1 => addend_seq_f16(i) := Cat(1.U(head_first_one_width.W), ~sign_seq(i), pp_seq_f16(i), 0.U, sign_seq(i - 1))
+      case `outNumBeforeLast` =>
+        if (width % 2 == 0) {
+          if (is_addend_expand_1bit) addend_seq_f16(i) := Cat(1.U, ~sign_seq(i), pp_seq_f16(i), 0.U, sign_seq(i - 1), 0.U(tail_zero_width.W))
+          else addend_seq_f16(i) := Cat(~sign_seq(i), pp_seq_f16(i), 0.U, sign_seq(i - 1), 0.U(tail_zero_width.W))
+        }
+        else addend_seq_f16(i) := Cat(1.U, ~sign_seq(i), pp_seq_f16(i), 0.U, sign_seq(i - 1), 0.U(tail_zero_width.W))
+      case `outNumLast` =>
+        if (width % 2 == 0) addend_seq_f16(i) := Cat(pp_seq_f16(i).tail(1), 0.U, sign_seq(i - 1), 0.U((2 * (i - 1)).W))
+        else if (is_addend_expand_1bit) addend_seq_f16(i) := Cat(1.U, pp_seq_f16(i), 0.U, sign_seq(i - 1), 0.U(tail_zero_width.W))
+        else addend_seq_f16(i) := Cat(pp_seq_f16(i), 0.U, sign_seq(i - 1), 0.U((2 * (i - 1)).W))
+      case _ => addend_seq_f16(i) := Cat(1.U(head_first_one_width.W), ~sign_seq(i), pp_seq_f16(i), 0.U, sign_seq(i - 1), 0.U(tail_zero_width.W))
+    }
+  }
+  io.out_pp := addend_seq_f16
 }
 

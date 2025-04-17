@@ -58,3 +58,11 @@ object VfaddOpCode {
   def fleq     = "b11100".U(5.W)
   def fltq     = "b11011".U(5.W)
 }
+
+object GatedValidRegNext {
+  def apply(next: Bool, init: Bool = false.B): Bool = {
+    val last = Wire(next.cloneType)
+    last := RegEnable(next, init, next || last)
+    last
+  }
+}
