@@ -24,9 +24,11 @@ class top extends Module with Params{
     val is_vec        = Input(Bool())
     val vs2           = Input(Vec(VLEN/XLEN, UInt(XLEN.W)))
     val vs1           = Input(Vec(VLEN/XLEN, UInt(XLEN.W)))
-
+    
     val vd  = Output(UInt(XLEN.W))
     val fflags  = Output(UInt(5.W))
+    val mixed_vd  = Output(UInt(XLEN.W))
+    val mixed_fflags  = Output(UInt(5.W))
   })
 
   val mix_fmul = Module(new FloatFMA)
@@ -42,21 +44,24 @@ class top extends Module with Params{
   mix_fmul.io.fp_bIsFpCanonicalNAN := 0.U 
   mix_fmul.io.fp_cIsFpCanonicalNAN := 0.U 
 
-  // val fmul = Module(new GFloatFMA)
-  // fmul.io.fire := io.fire
-  // fmul.io.fp_a := io.vs1(0)(floatWidth-1, 0)
-  // fmul.io.fp_b := io.vs2(0)(floatWidth-1, 0)
-  // fmul.io.fp_c := 0.U
+  io.mixed_vd := mix_fmul.io.fp_result  
+  io.mixed_fflags := mix_fmul.io.fflags
 
-  // fmul.io.round_mode := io.round_mode
-  // fmul.io.fp_format := io.fp_format
-  // fmul.io.op_code := io.opcode
-  // fmul.io.fp_aIsFpCanonicalNAN := 0.U 
-  // fmul.io.fp_bIsFpCanonicalNAN := 0.U 
-  // fmul.io.fp_cIsFpCanonicalNAN := 0.U 
+  val fmul = Module(new FloatFMAMixedWithTwoDifferentFormat)
+  fmul.io.fire := io.fire
+  fmul.io.fp_a := io.vs1(0)(floatWidth-1, 0)
+  fmul.io.fp_b := io.vs2(0)(floatWidth-1, 0)
+  fmul.io.fp_c := 0.U
 
-  io.vd := mix_fmul.io.fp_result  
-  io.fflags := mix_fmul.io.fflags
+  fmul.io.round_mode := io.round_mode
+  fmul.io.fp_format := io.fp_format
+  fmul.io.op_code := io.opcode
+  fmul.io.fp_aIsFpCanonicalNAN := 0.U 
+  fmul.io.fp_bIsFpCanonicalNAN := 0.U 
+  fmul.io.fp_cIsFpCanonicalNAN := 0.U 
+
+  io.vd := fmul.io.fp_result  
+  io.fflags := fmul.io.fflags
 
 }
 

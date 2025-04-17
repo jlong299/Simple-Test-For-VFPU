@@ -103,6 +103,30 @@ class FloatFMAMixedWithTwoDifferentFormat() extends Module {
   val fp_a_is_sign_inv = is_fnmacc || is_fnmsac
   val fp_c_is_sign_inv = is_fnmacc || is_fmsac
 
+  val U_Booth_Input_A = Module(new InputMixedSeletor(support_fp64, support_fp32, support_fp16, support_bf16))
+  val U_Booth_Input_B = Module(new InputMixedSeletor(support_fp64, support_fp32, support_fp16, support_bf16))
+
+  val booth_in_a = U_Booth_Input_A.io.output
+  val booth_in_b = U_Booth_Input_B.io.output
+
+  //need to change
+  val U_BoothEncoder = Module(new BoothEncoder(width = booth_in_a.getWidth, is_addend_expand_1bit = true, support_fp64, support_fp32, support_fp16, support_bf16))
+  U_BoothEncoder.io.in_a := booth_in_a
+  U_BoothEncoder.io.in_b := booth_in_b
+
+  val U_CSAnto2 = Module(new CSA_Nto2With3to2MainPipeline(U_BoothEncoder.io.out_pp.length,U_BoothEncoder.io.out_pp.head.getWidth,pipeLevel = CalcPipeLevel(U_BoothEncoder.io.out_pp.length)))
+  U_CSAnto2.io.fire := fire
+  U_CSAnto2.io.in := U_BoothEncoder.io.out_pp
+
+
+  // need to check
+  val CSA3to2_in_a = U_CSAnto2.io.out_sum
+  val CSA3to2_Input_b = Module(new InputMixedSeletor(support_fp64, support_fp32, support_fp16, support_bf16))
+  val CSA3to2_Input_c = Module(new InputMixedSeletor(support_fp64, support_fp32, support_fp16, support_bf16))
+
+  val fp_result_sel = Module(new InputMixedSeletor(support_fp64, support_fp32, support_fp16, support_bf16))
+  val fflags_sel    = Module(new InputMixedSeletor(support_fp64, support_fp32, support_fp16, support_bf16))
+
   if(support_fp64){
     val rshiftBasicF64        = significandWidthFP64 + 3
     val rshiftMaxF64          = 3*significandWidthFP64 + 4
@@ -178,17 +202,6 @@ class FloatFMAMixedWithTwoDifferentFormat() extends Module {
     val is_sub_f32_reg0       = RegEnable(is_sub_f32, fire)
     val is_sub_f32_reg1       = RegEnable(is_sub_f32_reg0, fire_reg0)
     val is_sub_f32_reg2       = RegEnable(is_sub_f32_reg1, fire_reg1)
-
-    val Ea_f32                = fp_a_f32.tail(1).head(exponentWidthFP32)
-    val Eb_f32                = fp_b_f32.tail(1).head(exponentWidthFP32)
-    val Ec_f32                = fp_c_f32.tail(1).head(exponentWidthFP32)
-    val Ea_f32_is_not_zero    = Ea_f32.orR
-    val Eb_f32_is_not_zero    = Eb_f32.orR
-    val Ec_f32_is_not_zero    = Ec_f32.orR
-
-    val fp_a_significand_f32  = Cat(Ea_f32_is_not_zero,fp_a_f32.tail(exponentWidthFP32+1))
-    val fp_b_significand_f32  = Cat(Eb_f32_is_not_zero,fp_b_f32.tail(exponentWidthFP32+1))
-    val fp_c_significand_f32  = Cat(Ec_f32_is_not_zero,fp_c_f32.tail(exponentWidthFP32+1))
 
     val Ea_f32                = fp_a_f32.tail(1).head(exponentWidthFP32)
     val Eb_f32                = fp_b_f32.tail(1).head(exponentWidthFP32)
@@ -314,27 +327,25 @@ class FloatFMAMixedWithTwoDifferentFormat() extends Module {
     val Ec_fix_bf16            = Cat(Ec_bf16.head(exponentWidthBF16-1),!Ec_bf16_is_not_zero | Ec_bf16(0))
     val Eab_bf16               = Cat(0.U,Ea_fix_bf16 +& Eb_fix_bf16).asSInt - biasBF16.S + rshiftBasicBF16.S
     val rshift_value_bf16      = Eab_bf16 - Cat(0.U,Ec_fix_bf16).asSInt
-    val rshift_value_cut_bf16  = rshift_value_bf16(rshiftMaxbF16.U.getWidth-1,0)
-    val fp_c_significand_cat0_bf16  = Cat(fp_c_significand_bf16,0.U((rshiftMaxbF16-significandWidthBF16).W))
+    val rshift_value_cut_bf16  = rshift_value_bf16(rshiftMaxBF16.U.getWidth-1,0)
+    val fp_c_significand_cat0_bf16  = Cat(fp_c_significand_bf16,0.U((rshiftMaxBF16-significandWidthBF16).W))
     val rshift_result_with_grs_bf16 = shiftRightWithMuxSticky(fp_c_significand_cat0_bf16,rshift_value_cut_bf16)
     val Ec_is_too_big_bf16          = rshift_value_bf16 <= 0.S
-    val Ec_is_too_small_bf16        = rshift_value_bf16.asSInt > rshiftMaxbF16.S
+    val Ec_is_too_small_bf16        = rshift_value_bf16.asSInt > rshiftMaxBF16.S
     val Ec_is_medium_bf16           = !Ec_is_too_big_bf16 & !Ec_is_too_small_bf16
     val rshift_guard_bf16           = RegEnable(Mux(Ec_is_medium_bf16, rshift_result_with_grs_bf16(2), 0.U), fire)
     val rshift_round_bf16           = RegEnable(Mux(Ec_is_medium_bf16, rshift_result_with_grs_bf16(1), 0.U), fire)
     val rshift_sticky_bf16          = RegEnable(Mux(Ec_is_medium_bf16, rshift_result_with_grs_bf16(0), Mux(Ec_is_too_big_bf16, 0.U, fp_c_significand_bf16.orR)), fire)
 
-    val rshift_result_temp_bf16     = rshift_result_with_grs_bf16.head(rshiftMaxbF16-2)
+    val rshift_result_temp_bf16     = rshift_result_with_grs_bf16.head(rshiftMaxBF16-2)
     val rshift_result_bf16          = Mux(Ec_is_medium_bf16,
       rshift_result_temp_bf16,
-      Mux(Ec_is_too_big_bf16, fp_c_significand_cat0_bf16.head(rshiftMaxbF16-2), 0.U((rshiftMaxbF16-2).W))
+      Mux(Ec_is_too_big_bf16, fp_c_significand_cat0_bf16.head(rshiftMaxBF16-2), 0.U((rshiftMaxBF16-2).W))
     )
     val fp_c_rshiftValue_inv_bf16_reg0 = RegEnable(Mux(is_sub_bf16.asBool ,Cat(1.U,~rshift_result_bf16),Cat(0.U,rshift_result_bf16)), fire)
 
   }
 
-  val U_Booth_Input_A = Module(new InputMixedSeletor(support_fp64, support_fp32, support_fp16, support_bf16))
-  val U_Booth_Input_B = Module(new InputMixedSeletor(support_fp64, support_fp32, support_fp16, support_bf16))
 
   if(support_fp64){
     U_Booth_Input_A.io.input_f64 := fp_a_significand_f64
@@ -360,25 +371,6 @@ class FloatFMAMixedWithTwoDifferentFormat() extends Module {
     U_Booth_Input_B.io.input_bf16 := fp_b_significand_bf16
     U_Booth_Input_B.io.is_bf16 := is_bf16
   }
-
-  val booth_in_a = U_Booth_Input_A.io.output
-  val booth_in_b = U_Booth_Input_B.io.output
-
-  //need to change
-  val U_BoothEncoder = Module(new BoothEncoder(width = booth_in_a.getWidth, is_addend_expand_1bit = true, support_fp64, support_fp32, support_fp16, support_bf16))
-  U_BoothEncoder.io.in_a := booth_in_a
-  U_BoothEncoder.io.in_b := booth_in_b
-
-  val U_CSAnto2 = Module(new CSA_Nto2With3to2MainPipeline(U_BoothEncoder.io.out_pp.length,U_BoothEncoder.io.out_pp.head.getWidth,pipeLevel = CalcPipeLevel(U_BoothEncoder.io.out_pp.length)))
-  U_CSAnto2.io.fire := fire
-  U_CSAnto2.io.in := U_BoothEncoder.io.out_pp
-
-
-  // need to check
-  val CSA3to2_in_a = U_CSAnto2.io.out_sum
-  val CSA3to2_Input_b = Module(new InputMixedSeletor(support_fp64, support_fp32, support_fp16, support_bf16))
-  val CSA3to2_Input_c = Module(new InputMixedSeletor(support_fp64, support_fp32, support_fp16, support_bf16))
-
   if(support_fp64){
     CSA3to2_Input_b.io.input_f64 := Cat(fp_a_significand_f64(significandWidthFP64*2,1), is_sub_f64_reg0 & !rshift_guard_f64 & !rshift_round_f64 & !rshift_sticky_f64)
     CSA3to2_Input_b.io.is_fp64 := is_fp64_reg0
@@ -496,8 +488,6 @@ class FloatFMAMixedWithTwoDifferentFormat() extends Module {
     output_bf16.io.fp_cIsFpCanonicalNAN             := io.fp_cIsFpCanonicalNAN
   }
 
-  val fp_result_sel = Module(new InputMixedSeletor(support_fp64, support_fp32, support_fp16, support_bf16))
-  val fflags_sel    = Module(new InputMixedSeletor(support_fp64, support_fp32, support_fp16, support_bf16))
   if(support_fp64){
     fp_result_sel.io.input_f64  := Cat(0.U(3.W), fp_c_rshift_result_high_inv_add0_f64)
     fp_result_sel.io.is_fp64    := is_fp64_reg0
@@ -535,15 +525,15 @@ class InputMixedSeletor(
   supportBF16: Boolean,
 ) extends Module {
   val io = IO(new Bundle {
-    val is_fp64 = if(supportFP64) Input(Bool()) else Input(UInt(0.U))
-    val is_fp32 = if(supportFP32) Input(Bool()) else Input(UInt(0.U))
-    val is_fp16 = if(supportFP16) Input(Bool()) else Input(UInt(0.U))
-    val is_bf16 = if(supportBF16) Input(Bool()) else Input(UInt(0.U))
+    val is_fp64 = if(supportFP64) Input(Bool()) else Input(UInt(0.W))
+    val is_fp32 = if(supportFP32) Input(Bool()) else Input(UInt(0.W))
+    val is_fp16 = if(supportFP16) Input(Bool()) else Input(UInt(0.W))
+    val is_bf16 = if(supportBF16) Input(Bool()) else Input(UInt(0.W))
 
-    val input_f64  = if(supportFP64) Input(UInt()) else Input(0.U)
-    val input_f32  = if(supportFP32) Input(UInt()) else Input(0.U)
-    val input_f16  = if(supportFP16) Input(UInt()) else Input(0.U)
-    val input_bf16 = if(supportBF16) Input(UInt()) else Input(0.U)
+    val input_f64  = if(supportFP64) Input(UInt()) else Input(UInt(0.W))
+    val input_f32  = if(supportFP32) Input(UInt()) else Input(UInt(0.W))
+    val input_f16  = if(supportFP16) Input(UInt()) else Input(UInt(0.W))
+    val input_bf16 = if(supportBF16) Input(UInt()) else Input(UInt(0.W))
 
     val output      = Output(UInt())
   })
@@ -620,10 +610,10 @@ class BoothEncoderFP64FP32FP16BF16(
   val io = IO(new Bundle() {
     val in_a   = Input(UInt(width.W))
     val in_b   = Input(UInt(width.W))
-    val is_fp64 = if(supportFP64) Input(Bool()) else Input(UInt(0.U))
-    val is_fp32 = if(supportFP32) Input(Bool()) else Input(UInt(0.U))
-    val is_fp16 = if(supportFP16) Input(Bool()) else Input(UInt(0.U))
-    val is_bf16 = if(supportBF16) Input(Bool()) else Input(UInt(0.U))
+    val is_fp64 = if(supportFP64) Input(Bool()) else Input(UInt(0.W))
+    val is_fp32 = if(supportFP32) Input(Bool()) else Input(UInt(0.W))
+    val is_fp16 = if(supportFP16) Input(Bool()) else Input(UInt(0.W))
+    val is_bf16 = if(supportBF16) Input(Bool()) else Input(UInt(0.W))
     val out_pp = Output(Vec(outNum,UInt(addend_seq_width.W)))
   })
 
@@ -635,6 +625,8 @@ class BoothEncoderFP64FP32FP16BF16(
   val addend_seq_width      : Int = if(is_addend_expand_1bit) 2*width+1 else 2*width
   val addend_seq_width_FP64 : Int = if(is_addend_expand_1bit) 2*significandWidthFP64+1 else 2*significandWidthFP64
   val addend_seq_width_FP32 : Int = if(is_addend_expand_1bit) 2*significandWidthFP32+1 else 2*significandWidthFP32 
+  val addend_seq_width_FP16 : Int = if(is_addend_expand_1bit) 2*significandWidthFP16+1 else 2*significandWidthFP16
+  val addend_seq_width_BF16 : Int = if(is_addend_expand_1bit) 2*significandWidthBF16+1 else 2*significandWidthBF16 
 
 
   val outNum  = width/2 + 1
@@ -735,34 +727,158 @@ class BoothEncoderFP64FP32FP16BF16(
     }
   }
 
-  val addend_seq_f64 = Wire(Vec(outNum,UInt(addend_seq_width.W)))
-  val addend_seq_f32_to_f64 = Wire(Vec(outNum,UInt(addend_seq_width.W)))
-  val addend_seq_f16_to_f64 = Wire(Vec(outNum,UInt(addend_seq_width.W)))
-  val addend_seq_f32 = Wire(Vec(outNum,UInt(49.W)))
-  val addend_seq_f16 = Wire(Vec(outNum,UInt(23.W)))
-  val addend_seq_f16 = Wire(Vec(outNum,UInt(addend_seq_width.W)))
-  val outNumBeforeLast = outNum-2
-  val outNumLast = outNum-1
-  for (i <- 0 until outNum) {
-    val head_first_one_width = width - 4 - 2 * (i - 1)
-    val tail_zero_width = 2 * (i - 1)
-    i match {
-      case 0 => addend_seq_f16(i) := Cat(0.U((width - 4).W), ~sign_seq(i), sign_seq(i), sign_seq(i), pp_seq_f16(0))
-      case 1 => addend_seq_f16(i) := Cat(1.U(head_first_one_width.W), ~sign_seq(i), pp_seq_f16(i), 0.U, sign_seq(i - 1))
-      case `outNumBeforeLast` =>
-        if (width % 2 == 0) {
-          if (is_addend_expand_1bit) addend_seq_f16(i) := Cat(1.U, ~sign_seq(i), pp_seq_f16(i), 0.U, sign_seq(i - 1), 0.U(tail_zero_width.W))
-          else addend_seq_f16(i) := Cat(~sign_seq(i), pp_seq_f16(i), 0.U, sign_seq(i - 1), 0.U(tail_zero_width.W))
-        }
-        else addend_seq_f16(i) := Cat(1.U, ~sign_seq(i), pp_seq_f16(i), 0.U, sign_seq(i - 1), 0.U(tail_zero_width.W))
-      case `outNumLast` =>
-        if (width % 2 == 0) addend_seq_f16(i) := Cat(pp_seq_f16(i).tail(1), 0.U, sign_seq(i - 1), 0.U((2 * (i - 1)).W))
-        else if (is_addend_expand_1bit) addend_seq_f16(i) := Cat(1.U, pp_seq_f16(i), 0.U, sign_seq(i - 1), 0.U(tail_zero_width.W))
-        else addend_seq_f16(i) := Cat(pp_seq_f16(i), 0.U, sign_seq(i - 1), 0.U((2 * (i - 1)).W))
-      case _ => addend_seq_f16(i) := Cat(1.U(head_first_one_width.W), ~sign_seq(i), pp_seq_f16(i), 0.U, sign_seq(i - 1), 0.U(tail_zero_width.W))
+  val addend_seq_f64  = if(supportFP64) Wire(Vec(outNum,UInt(addend_seq_width_FP64.W)))else 0.U(0.W)
+  val addend_seq_f32  = if(supportFP32) Wire(Vec(outNum,UInt(addend_seq_width_FP32.W)))else 0.U(0.W)
+  val addend_seq_f16  = if(supportFP16) Wire(Vec(outNum,UInt(addend_seq_width_FP16.W)))else 0.U(0.W)
+  val addend_seq_bf16 = if(supportBF16) Wire(Vec(outNum,UInt(addend_seq_width_BF16.W)))else 0.U(0.W)
+  
+  if(support_FP64){
+    val outNumBeforeLastFP64 = outNumFP64-2
+    val outNumLastFP64       = outNumFP64-1
+    for (i <- 0 until outNum_FP64) {
+      val head_first_one_width = significandWidthFP64 - 4 - 2 * (i - 1)
+      val tail_zero_width = 2 * (i - 1)
+      i match {
+        case 0 => addend_seq_f64(i) := Cat(0.U((significandWidthFP64 - 4).W), ~sign_seq(i), sign_seq(i), sign_seq(i), pp_seq_f64(0))
+        case 1 => addend_seq_f64(i) := Cat(1.U(head_first_one_width.W), ~sign_seq(i), pp_seq_f64(i), 0.U, sign_seq(i - 1))
+        case `outNumBeforeLast` =>
+          if (significandWidthFP64 % 2 == 0) {
+            if (is_addend_expand_1bit) addend_seq_f64(i) := Cat(1.U, ~sign_seq(i), pp_seq_f64(i), 0.U, sign_seq(i - 1), 0.U(tail_zero_width.W))
+            else addend_seq_f64(i) := Cat(~sign_seq(i), pp_seq_f64(i), 0.U, sign_seq(i - 1), 0.U(tail_zero_width.W))
+          }
+          else addend_seq_f64(i) := Cat(1.U, ~sign_seq(i), pp_seq_f64(i), 0.U, sign_seq(i - 1), 0.U(tail_zero_width.W))
+        case `outNumLast` =>
+          if (significandWidthFP64 % 2 == 0) addend_seq_f64(i) := Cat(pp_seq_f64(i).tail(1), 0.U, sign_seq(i - 1), 0.U((2 * (i - 1)).W))
+          else if (is_addend_expand_1bit) addend_seq_f64(i) := Cat(1.U, pp_seq_f64(i), 0.U, sign_seq(i - 1), 0.U(tail_zero_width.W))
+          else addend_seq_f64(i) := Cat(pp_seq_f64(i), 0.U, sign_seq(i - 1), 0.U((2 * (i - 1)).W))
+        case _ => addend_seq_f64(i) := Cat(1.U(head_first_one_width.W), ~sign_seq(i), pp_seq_f64(i), 0.U, sign_seq(i - 1), 0.U(tail_zero_width.W))
+      }
     }
   }
-  io.out_pp := addend_seq_f16
+  if(support_FP32){
+    val outNumBeforeLastFP32 = outNumFP32-2
+    val outNumLastFP32       = outNumFP32-1
+    for (i <- 0 until outNum_FP32) {
+      val head_first_one_width = significandWidthFP32 - 4 - 2 * (i - 1)
+      val tail_zero_width = 2 * (i - 1)
+      i match {
+        case 0 => addend_seq_f32(i) := Cat(0.U((significandWidthFP32 - 4).W), ~sign_seq(i), sign_seq(i), sign_seq(i), pp_seq_f32(0))
+        case 1 => addend_seq_f32(i) := Cat(1.U(head_first_one_width.W), ~sign_seq(i), pp_seq_f32(i), 0.U, sign_seq(i - 1))
+        case `outNumBeforeLast` =>
+          if (significandWidthFP32 % 2 == 0) {
+            if (is_addend_expand_1bit) addend_seq_f32(i) := Cat(1.U, ~sign_seq(i), pp_seq_f32(i), 0.U, sign_seq(i - 1), 0.U(tail_zero_width.W))
+            else addend_seq_f32(i) := Cat(~sign_seq(i), pp_seq_f32(i), 0.U, sign_seq(i - 1), 0.U(tail_zero_width.W))
+          }
+          else addend_seq_f32(i) := Cat(1.U, ~sign_seq(i), pp_seq_f32(i), 0.U, sign_seq(i - 1), 0.U(tail_zero_width.W))
+        case `outNumLast` =>
+          if (significandWidthFP32 % 2 == 0) addend_seq_f32(i) := Cat(pp_seq_f32(i).tail(1), 0.U, sign_seq(i - 1), 0.U((2 * (i - 1)).W))
+          else if (is_addend_expand_1bit) addend_seq_f32(i) := Cat(1.U, pp_seq_f32(i), 0.U, sign_seq(i - 1), 0.U(tail_zero_width.W))
+          else addend_seq_f32(i) := Cat(pp_seq_f32(i), 0.U, sign_seq(i - 1), 0.U((2 * (i - 1)).W))
+        case _ => addend_seq_f32(i) := Cat(1.U(head_first_one_width.W), ~sign_seq(i), pp_seq_f32(i), 0.U, sign_seq(i - 1), 0.U(tail_zero_width.W))
+      }
+    }  
+    for (i <- 13 until outNum){
+      addend_seq_f32(i) := 0.U
+    }
+  }
+  if(support_FP16){
+    val outNumBeforeLastFP16 = outNumFP16-2
+    val outNumLastFP16       = outNumFP16-1
+    for (i <- 0 until outNum_FP16) {
+      val head_first_one_width = significandWidthFP16 - 4 - 2 * (i - 1)
+      val tail_zero_width = 2 * (i - 1)
+      i match {
+        case 0 => addend_seq_f16(i) := Cat(0.U((significandWidthFP16 - 4).W), ~sign_seq(i), sign_seq(i), sign_seq(i), pp_seq_f16(0))
+        case 1 => addend_seq_f16(i) := Cat(1.U(head_first_one_width.W), ~sign_seq(i), pp_seq_f16(i), 0.U, sign_seq(i - 1))
+        case `outNumBeforeLast` =>
+          if (significandWidthFP16 % 2 == 0) {
+            if (is_addend_expand_1bit) addend_seq_f16(i) := Cat(1.U, ~sign_seq(i), pp_seq_f16(i), 0.U, sign_seq(i - 1), 0.U(tail_zero_width.W))
+            else addend_seq_f16(i) := Cat(~sign_seq(i), pp_seq_f16(i), 0.U, sign_seq(i - 1), 0.U(tail_zero_width.W))
+          }
+          else addend_seq_f16(i) := Cat(1.U, ~sign_seq(i), pp_seq_f16(i), 0.U, sign_seq(i - 1), 0.U(tail_zero_width.W))
+        case `outNumLast` =>
+          if (significandWidthFP16 % 2 == 0) addend_seq_f16(i) := Cat(pp_seq_f16(i).tail(1), 0.U, sign_seq(i - 1), 0.U((2 * (i - 1)).W))
+          else if (is_addend_expand_1bit) addend_seq_f16(i) := Cat(1.U, pp_seq_f16(i), 0.U, sign_seq(i - 1), 0.U(tail_zero_width.W))
+          else addend_seq_f16(i) := Cat(pp_seq_f16(i), 0.U, sign_seq(i - 1), 0.U((2 * (i - 1)).W))
+        case _ => addend_seq_f16(i) := Cat(1.U(head_first_one_width.W), ~sign_seq(i), pp_seq_f16(i), 0.U, sign_seq(i - 1), 0.U(tail_zero_width.W))
+      }
+    }  
+    for (i <- 13 until outNum){
+      addend_seq_f16(i) := 0.U
+    }
+  }
+  if(support_BF16){
+    val outNumBeforeLastBF16 = outNumBF16-2
+    val outNumLastBF16       = outNumBF16-1
+    for (i <- 0 until outNum_BF16) {
+      val head_first_one_width = significandWidthBF16 - 4 - 2 * (i - 1)
+      val tail_zero_width = 2 * (i - 1)
+      i match {
+        case 0 => addend_seq_bf16(i) := Cat(0.U((significandWidthBF16 - 4).W), ~sign_seq(i), sign_seq(i), sign_seq(i), pp_seq_bf16(0))
+        case 1 => addend_seq_bf16(i) := Cat(1.U(head_first_one_width.W), ~sign_seq(i), pp_seq_bf16(i), 0.U, sign_seq(i - 1))
+        case `outNumBeforeLast` =>
+          if (significandWidthBF16 % 2 == 0) {
+            if (is_addend_expand_1bit) addend_seq_bf16(i) := Cat(1.U, ~sign_seq(i), pp_seq_bf16(i), 0.U, sign_seq(i - 1), 0.U(tail_zero_width.W))
+            else addend_seq_bf16(i) := Cat(~sign_seq(i), pp_seq_bf16(i), 0.U, sign_seq(i - 1), 0.U(tail_zero_width.W))
+          }
+          else addend_seq_bf16(i) := Cat(1.U, ~sign_seq(i), pp_seq_bf16(i), 0.U, sign_seq(i - 1), 0.U(tail_zero_width.W))
+        case `outNumLast` =>
+          if (significandWidthBF16 % 2 == 0) addend_seq_bf16(i) := Cat(pp_seq_bf16(i).tail(1), 0.U, sign_seq(i - 1), 0.U((2 * (i - 1)).W))
+          else if (is_addend_expand_1bit) addend_seq_bf16(i) := Cat(1.U, pp_seq_bf16(i), 0.U, sign_seq(i - 1), 0.U(tail_zero_width.W))
+          else addend_seq_bf16(i) := Cat(pp_seq_bf16(i), 0.U, sign_seq(i - 1), 0.U((2 * (i - 1)).W))
+        case _ => addend_seq_bf16(i) := Cat(1.U(head_first_one_width.W), ~sign_seq(i), pp_seq_bf16(i), 0.U, sign_seq(i - 1), 0.U(tail_zero_width.W))
+      }
+    }  
+    for (i <- 13 until outNum){
+      addend_seq_bf16(i) := 0.U
+    }
+  }
+  if(supportFP32){
+    val addend_seq_f32_to_longer = Wire(Vec(outNum, UInt(addend_seq_width.W)))
+    if (addend_seq_width_FP32 < addend_seq_width) {
+      for (i <- 0 until outNum) {
+        addend_seq_f32_to_longer(i) := Cat(0.U((addend_seq_width - addend_seq_width_FP32).W), addend_seq_f32(i))
+      }
+    }
+    else addend_seq_f32_to_longer := addend_seq_f32
+  }
+  if(supportFP16){
+    val addend_seq_f16_to_longer = Wire(Vec(outNum, UInt(addend_seq_width.W)))
+    if (addend_seq_width_FP16 < addend_seq_width) {
+      for (i <- 0 until outNum) {
+        addend_seq_f16_to_longer(i) := Cat(0.U((addend_seq_width - addend_seq_width_FP16).W), addend_seq_f16(i))
+      }
+    }
+    else addend_seq_f16_to_longer := addend_seq_f16
+  }
+  if(supportBF16){
+    val addend_seq_bf16_to_longer = Wire(Vec(outNum, UInt(addend_seq_width.W)))
+    if (addend_seq_width_BF16 < addend_seq_width) {
+      for (i <- 0 until outNum) {
+        addend_seq_bf16_to_longer(i) := Cat(0.U((addend_seq_width - addend_seq_width_BF16).W), addend_seq_bf16(i))
+      }
+    }
+    else addend_seq_bf16_to_longer := addend_seq_bf16
+  }
+  val out_pp_sel = Module(new InputMixedSeletor(support_fp64, support_fp32, support_fp16, support_bf16))
+  if(supportFP64){
+    out_pp_sel.io.input_f64 := addend_seq_f64
+    out_pp_sel.io.is_fp64 := io.is_fp64
+  }
+  if(supportFP32){
+    out_pp_sel.io.input_f32 := addend_seq_f32_to_longer
+    out_pp_sel.io.is_fp32 := io.is_fp32
+  }
+  if(supportFP16){
+    out_pp_sel.io.input_f16 := addend_seq_f16_to_longer
+    out_pp_sel.io.is_fp16 := io.is_fp16
+  }
+  if(supportBF16){
+    out_pp_sel.io.input_bf16 := addend_seq_bf16_to_longer
+    out_pp_sel.io.is_bf16 := io.is_bf16
+  }
+
+  io.out_pp := out_pp_sel.io.output
 }
 
 class OutputGenerator(
