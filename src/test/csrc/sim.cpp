@@ -128,7 +128,7 @@ void gen_rand_vctrl() {
     Sim_IO.is_vfredmax = 0;
     Sim_IO.vlmul = 3;
     Sim_IO.round_mode = 0;
-    Sim_IO.fp_format = 0;
+    Sim_IO.fp_format = 2;
     Sim_IO.is_vec = 1;
     Sim_IO.index = 0;
 

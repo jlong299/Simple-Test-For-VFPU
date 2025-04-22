@@ -31,7 +31,7 @@ class top extends Module with Params{
     val mixed_fflags  = Output(UInt(5.W))
   })
 
-  val mix_fmul = Module(new FloatFMA)
+  val mix_fmul = Module(new FloatFMAMixedWithDifferentFormat(support_fp64 = true, support_fp32 = true, support_fp16 = true, support_bf16 = false))
   mix_fmul.io.fire := io.fire
   mix_fmul.io.fp_a := Cat(0.U((64-32).W), io.vs1(0)(32-1, 0))
   mix_fmul.io.fp_b := Cat(0.U((64-32).W), io.vs2(0)(32-1, 0))
@@ -47,10 +47,10 @@ class top extends Module with Params{
   io.mixed_vd := mix_fmul.io.fp_result  
   io.mixed_fflags := mix_fmul.io.fflags
 
-  val fmul = Module(new FloatFMAMixedWithTwoDifferentFormat)
+  val fmul = Module(new FloatFMA)
   fmul.io.fire := io.fire
-  fmul.io.fp_a := io.vs1(0)(floatWidth-1, 0)
-  fmul.io.fp_b := io.vs2(0)(floatWidth-1, 0)
+  fmul.io.fp_a :=  Cat(0.U((64-32).W), io.vs1(0)(32-1, 0))
+  fmul.io.fp_b :=  Cat(0.U((64-32).W), io.vs2(0)(32-1, 0))
   fmul.io.fp_c := 0.U
 
   fmul.io.round_mode := io.round_mode
