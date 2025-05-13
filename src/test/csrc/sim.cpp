@@ -20,6 +20,11 @@ const std::unique_ptr<Vtop> top{new Vtop{contextp.get(), "TOP"}};
 
 IOput Sim_IO;
 
+#define VLMUL8 3
+#define VLMUL4 2
+#define VLMUL2 1
+#define VLMUL1 0
+
 /* sim initial */
 void sim_init(int argc, char *argv[]) {
     top->reset = 1;
@@ -117,16 +122,15 @@ void single_cycle() {
 
 
 void index_acum() {
-
     Sim_IO.index += 1;
     top->io_index = Sim_IO.index;
-
 }
+
 void gen_rand_vctrl() {
 
     Sim_IO.is_vfredsum = 1;
     Sim_IO.is_vfredmax = 0;
-    Sim_IO.vlmul = 3;
+    Sim_IO.vlmul = VLMUL4;
     Sim_IO.round_mode = 0;
     Sim_IO.fp_format = 2;
     Sim_IO.is_vec = 1;
@@ -136,7 +140,6 @@ void gen_rand_vctrl() {
     top->io_is_vfredsum = Sim_IO.is_vfredsum;
     top->io_is_vfredmax = Sim_IO.is_vfredmax;
     top->io_vlmul = Sim_IO.vlmul;
-    top->io_opcode = 0x0;
     top->io_round_mode = Sim_IO.round_mode;
     top->io_fp_format = Sim_IO.fp_format;
     top->io_is_vec = Sim_IO.is_vec;
@@ -155,14 +158,20 @@ void get_expected_result() {
     case 0: vlmul = 1; break;
     default: vlmul = 0; break;
     }
-    printf("vlmul: %d\n", vlmul);
+    printf("\nvlmul: %d\n", vlmul);
     if(Sim_IO.fp_format == 2){
-        float acc = (*(float*)&Sim_IO.vs2[0]) * (*(float*)&Sim_IO.vs1[0]);  
+        float acc = (*(float*)&Sim_IO.vs1[0]);  
 
         printf("vs1:\n");
-        fp32_print(Sim_IO.vs1, VLEN);
+        printf("%12.4f\n", *(float*)&Sim_IO.vs1[0]);
         printf("vs2:\n");
         printf("%12.4f\n", *(float*)&Sim_IO.vs2[0]);
+
+        for (int j = 0; j < vlmul; j++) {
+            for (int i = 0; i < VLEN/XLEN; i++) {
+                acc = acc + *(float*)&Sim_IO.vs2[0];
+            }
+        }
 
         Sim_IO.expected_vd = *(uint32_t*)&acc;
         printf("expected vd:\n");
@@ -174,7 +183,7 @@ void get_expected_result() {
         float acc = half_to_float(low_fp16);  
 
         printf("vs1:\n");
-        fp16_print(Sim_IO.vs1, VLEN);
+        printf("%12.4f\n", Sim_IO.vs1);
         printf("vs2:\n");
         printf("%12.4f\n", acc);
 
@@ -199,7 +208,7 @@ void get_expected_result() {
 
 
 void gen_rand_input() {
-    float val_a = 124.0f;               
+    float val_a = 1444.0f;               
     uint32_t fp_a;     
     memcpy(&fp_a, &val_a, sizeof(float));
 
@@ -242,8 +251,8 @@ void gen_rand_input() {
 
     gen_rand_vctrl();
     for(int i = 0; i < VLEN/XLEN; i++){
-        Sim_IO.vs1[i] = fp_a;
-        Sim_IO.vs2[i] = fp_b;
+        Sim_IO.vs1[i] = fp_b;
+        Sim_IO.vs2[i] = fp_a;
     }
     get_expected_result();
 
@@ -402,15 +411,13 @@ void sim_main(int argc, char *argv[]) {
     single_cycle();
     /* main loop */
     while (max_cycles--) {
-        // if(top->io_finish){
-        //     break;
-        // }
-        // else{
-        //     index_acum();
-        //     single_cycle();
-        // }
-        index_acum();
-        single_cycle();
+        if(top->io_finish){
+            break;
+        }
+        else{
+            index_acum();
+            single_cycle();
+        }
     }
     get_output();
     display();

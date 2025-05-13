@@ -3,30 +3,43 @@ package Vreduction
 import chisel3._
 import chisel3.util._
 import scala.collection.mutable.ListBuffer
+import Vreduction.Params._
 
-trait Params {
+object Params {
     val VLEN = 512
     val XLEN = 32
-    val exponentWidth : Int = 8
-    val significandWidth : Int = 24
-    val floatWidth = exponentWidth + significandWidth
 }
 
-class VredInput extends Bundle with Params {
+class VredInput extends Bundle {
   val vlmul         = UInt(3.W)
   val mask          = UInt(VLEN.W)
   val round_mode    = UInt(3.W)
   val fp_format     = UInt(2.W)
   val op_code       = UInt(5.W)
   val is_vec        = Bool()
-  val vs1           = UInt(VLEN.W)
-  val vs2           = UInt(XLEN.W)
+  val index         = UInt(3.W)
+  val vs1           = UInt(XLEN.W)
+  val vs2           = UInt(VLEN.W)
 }
 
 
-class VredOutput extends Bundle with Params{
+class VredOutput extends Bundle{
   val result  = UInt(XLEN.W)
   val fflags  = UInt(5.W)
+}
+
+class VUop extends VredInput {
+
+}
+
+object VectorElementFormat {
+  def width = 2
+  def b = "b00".U(width.W)
+  def h = "b01".U(width.W)  // f16
+  def w = "b10".U(width.W)  // f32
+  def d = "b11".U(width.W)  // f64
+
+  def apply() = UInt(width.W)
 }
 
 
@@ -68,6 +81,10 @@ object FmaOpCode {
   def fmsac   = "b0011".U(width.W)
   def fnmacc  = "b0010".U(width.W)
   def fnmsac  = "b0100".U(width.W)
+}
+
+object LZD {
+  def apply(in: UInt): UInt = PriorityEncoder(Reverse(Cat(in, 1.U)))
 }
 
 object GatedValidRegNext {
