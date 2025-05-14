@@ -20,11 +20,6 @@ const std::unique_ptr<Vtop> top{new Vtop{contextp.get(), "TOP"}};
 
 IOput Sim_IO;
 
-#define VLMUL8 3
-#define VLMUL4 2
-#define VLMUL2 1
-#define VLMUL1 0
-
 /* sim initial */
 void sim_init(int argc, char *argv[]) {
     top->reset = 1;
@@ -132,22 +127,22 @@ void gen_rand_vctrl() {
     // fp_format 01 -> fp16
     // fp_format 10 -> fp32
 
-    Sim_IO.is_vfredsum = 1;
-    Sim_IO.is_vfredmax = 0;
-    Sim_IO.vlmul = VLMUL4;
-    Sim_IO.round_mode = 0;
-    Sim_IO.fp_format = 2;
-    Sim_IO.is_vec = 1;
-    Sim_IO.index = 0;
+    Sim_IO.is_vfredsum  = 1;
+    Sim_IO.is_vfredmax  = 0;
+    Sim_IO.vlmul        = VLMUL4;
+    Sim_IO.round_mode   = 0;
+    Sim_IO.fp_format    = FP32;
+    Sim_IO.is_vec       = 1;
+    Sim_IO.index        = 0;
 
-    top->io_fire = 1;
+    top->io_fire        = 1;
     top->io_is_vfredsum = Sim_IO.is_vfredsum;
     top->io_is_vfredmax = Sim_IO.is_vfredmax;
-    top->io_vlmul = Sim_IO.vlmul;
-    top->io_round_mode = Sim_IO.round_mode;
-    top->io_fp_format = Sim_IO.fp_format;
-    top->io_is_vec = Sim_IO.is_vec;
-    top->io_index = Sim_IO.index;
+    top->io_vlmul       = Sim_IO.vlmul;
+    top->io_round_mode  = Sim_IO.round_mode;
+    top->io_fp_format   = Sim_IO.fp_format;
+    top->io_is_vec      = Sim_IO.is_vec;
+    top->io_index       = Sim_IO.index;
 
 }
 

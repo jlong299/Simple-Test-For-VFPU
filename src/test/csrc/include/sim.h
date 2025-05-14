@@ -26,4 +26,13 @@ typedef struct {
     uint32_t index;
 } IOput;
 
+#define VLMUL8 3
+#define VLMUL4 2
+#define VLMUL2 1
+#define VLMUL1 0
+
+#define FP32 2
+#define FP16 1
+#define BF16 0
+
 #endif
