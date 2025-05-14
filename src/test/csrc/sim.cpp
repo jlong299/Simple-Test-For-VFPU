@@ -128,6 +128,10 @@ void index_acum() {
 
 void gen_rand_vctrl() {
 
+    // fp_format 00 -> bf16
+    // fp_format 01 -> fp16
+    // fp_format 10 -> fp32
+
     Sim_IO.is_vfredsum = 1;
     Sim_IO.is_vfredmax = 0;
     Sim_IO.vlmul = VLMUL4;
