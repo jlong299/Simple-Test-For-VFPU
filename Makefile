@@ -42,7 +42,7 @@ BIN = $(BUILD_DIR)/$(TOP)
 NPC_EXEC := $(BIN)
 
 
-compile: $(VSRCS) $(CSRCS)
+$(BIN): $(VSRCS) $(CSRCS)
 	@rm -rf $(OBJ_DIR)
 	$(VERILATOR) $(VERILATOR_FLAGS) -top $(TOPNAME) $(VSRCS) $(CSRCS) \
 	$(addprefix -CFLAGS , $(CFLAGS)) $(addprefix -LDFLAGS , $(LDFLAGS)) \
@@ -53,8 +53,6 @@ run: $(BIN)
 	@echo "------------ RUN --------------"
 	$(NPC_EXEC)
 	@echo "----- if you need vcd file. add vcd=y to make ----"
-
-srun: compile run
 
 clean:
 	rm -rf $(BUILD_DIR)
