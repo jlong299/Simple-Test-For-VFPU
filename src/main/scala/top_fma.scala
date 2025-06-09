@@ -13,9 +13,9 @@ class top extends Module{
     val valid_in = Input(Bool())
     val is_bf16, is_fp16, is_fp32 = Input(Bool())
     val is_widen = Input(Bool())
-    val a_in = UInt(32.W)
-    val b_in = UInt(32.W)
-    val c_in = UInt(32.W)
+    val a_in = Input(UInt(32.W))
+    val b_in = Input(UInt(32.W))
+    val c_in = Input(UInt(32.W))
     val res_out = Output(UInt(32.W))
   })
 
