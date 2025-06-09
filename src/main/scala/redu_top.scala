@@ -1,5 +1,5 @@
 // src/main/scala/top.scala
-package top
+package topredu
 
 import chisel3._
 import chisel3.util._
