@@ -7,7 +7,7 @@ import chisel3.stage._
 import Vreduction._
 import Vreduction.Params._
 
-class top extends Module{
+class topRedu extends Module{
   val io = IO(new Bundle {
     val fire          = Input(Bool())
     val is_vfredsum   = Input(Bool())
@@ -45,6 +45,6 @@ class top extends Module{
   io.finish := vfred.io.finish
 }
 
-object topMain extends App {
-  (new ChiselStage).emitVerilog(new top, args)
+object topReduMain extends App {
+  (new ChiselStage).emitVerilog(new topRedu, args)
 }

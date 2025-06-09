@@ -25,18 +25,17 @@ class FMA_16_32 extends Module {
   val (expWidth_fp32, sigWidth_fp32) = (8, 24)
   val io = IO(new Bundle {
     val valid_in = Input(Bool())
-    val uop_in = Input(new VUop)
     val is_bf16, is_fp16, is_fp32 = Input(Bool())
+    val is_widen = Input(Bool())
     val a_in = UInt(32.W)
     val b_in = UInt(32.W)
     val c_in = UInt(32.W)
-    val uop_out = Output(new VUop)
     val res_out = Output(UInt(32.W))
   })
 
   val (is_bf16, is_fp16, is_fp32) = (io.is_bf16, io.is_fp16, io.is_fp32)
   val is_16 = is_fp16 || is_bf16
-  val widen = io.uop_in.ctrl.widen
+  val widen = io.is_widen
   val res_is_32 = widen || is_fp32
   val res_is_bf16 = is_bf16 && !widen
   val res_is_fp16 = is_fp16 && !widen
@@ -107,9 +106,8 @@ class FMA_16_32 extends Module {
   intMul_12_24.io.b_in := Mux(!is_16, sig_adjust_subnorm_32(1),
                           Cat(sig_adjust_subnorm_16(3), false.B, sig_adjust_subnorm_16(1), false.B))
   intMul_12_24.io.valid_in := io.valid_in
-  intMul_12_24.io.uop_in := io.uop_in
   intMul_12_24.io.is_16 := is_16
-  val uop_S1 = intMul_12_24.io.uop_out
+  val widen_S1 = RegEnable(widen, io.valid_in)
   val valid_S1 = intMul_12_24.io.valid_out
   val res_intMul_S1 = intMul_12_24.io.res_out
 
@@ -274,7 +272,6 @@ class FMA_16_32 extends Module {
   //---- Below is S2 (pipeline 2) stage:
   //-----------------------------------------
   val valid_S2 = RegNext(valid_S1)
-  val uop_S2 = RegEnable(uop_S1, valid_S1)
   val input_is_16_S2 = RegEnable(is_16, valid_S1)
   val res_is_32_S2 = RegEnable(res_is_32, valid_S1)
   val res_is_bf16_S2 = RegEnable(res_is_bf16, valid_S1)
@@ -299,7 +296,7 @@ class FMA_16_32 extends Module {
   val c_in_S1 = RegEnable(io.c_in, io.valid_in)
   val c_in_S2 = RegEnable(c_in_S1, valid_S1)
   val (sign_c_high, sign_c_low) = (c_in_S2(31), c_in_S2(15))
-  val widen_S2 = uop_S2.ctrl.widen
+  val widen_S2 = RegEnable(widen, valid_S1)
   val c_is_32 = !input_is_16_S2 || widen_S2
   val c_is_fp16 = RegEnable(RegEnable(is_fp16, valid_S1), valid_S2)
   val exp_high_c, exp_low_c = Wire(UInt(8.W))
@@ -463,7 +460,6 @@ class FMA_16_32 extends Module {
   //       Adder result shifting and rounding
   //--------------------------------------------------
   val valid_S3 = RegNext(valid_S2)
-  val uop_S3 = RegEnable(uop_S2, valid_S2)
   val c_in_S3 = RegEnable(c_in_S2, valid_S2)
   val input_is_16_S3 = RegEnable(input_is_16_S2, valid_S2)
   val res_is_32_S3 = RegEnable(res_is_32_S2, valid_S2)
@@ -661,6 +657,11 @@ class FMA_16_32 extends Module {
   val resFinal_fp16_low = Cat(sign_resFinal_low_fp16, exp_resFinal_low_fp16(4, 0), sig_resFinal_low_fp16)
   val resFinal_bf16_high = Cat(sign_resFinal_high_bf16, exp_resFinal_high_bf16, sig_resFinal_high_bf16)
   val resFinal_bf16_low = Cat(sign_resFinal_low_bf16, exp_resFinal_low_bf16, sig_resFinal_low_bf16)
+  println(s"resFinal_whole32 width: ${resFinal_whole32.getWidth}")
+  println(s"resFinal_fp16_high width: ${resFinal_fp16_high.getWidth}")
+  println(s"resFinal_fp16_low width: ${resFinal_fp16_low.getWidth}")
+  println(s"resFinal_bf16_high width: ${resFinal_bf16_high.getWidth}")
+  println(s"resFinal_bf16_low width: ${resFinal_bf16_low.getWidth}")
   require(resFinal_whole32.getWidth == 32 && resFinal_fp16_high.getWidth == 16 &&
           resFinal_fp16_low.getWidth == 16 && resFinal_bf16_high.getWidth == 16 && resFinal_bf16_low.getWidth == 16)
   val resFinal_high16 = Mux(res_is_fp16_S3, resFinal_fp16_high, resFinal_bf16_high)
@@ -688,7 +689,6 @@ class FMA_16_32 extends Module {
   
   io.res_out := Mux(res_is_32_S3, res_out_whole32, res_out_high16 ## res_out_low16)
   
-  io.uop_out := uop_S3 
 
   def shift(data: UInt, shift_amount: UInt, shift_right: Bool): UInt = {
     // Reverse the data when shifting left

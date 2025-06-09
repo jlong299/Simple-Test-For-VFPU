@@ -1,6 +1,6 @@
 TOP = top
 MAIN = top.topMain
-BUILD_DIR = ./build
+BUILD_DIR = ./build/fma
 OBJ_DIR = $(BUILD_DIR)/OBJ_DIR
 TOPNAME = top
 TOP_V = $(BUILD_DIR)/$(TOPNAME).v
@@ -15,7 +15,7 @@ VERILATOR_FLAGS +=  -MMD --trace --build -cc --exe \
 
 # timescale set
 VERILATOR_FLAGS += --timescale 1us/1us
-VERILATOR_FLAGS += -j 33
+VERILATOR_FLAGS += -j 28
 
 $(TOP_V): $(SCALA_FILE)
 	@mkdir -p $(@D)
