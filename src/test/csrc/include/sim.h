@@ -13,17 +13,14 @@ void sim_main(int argc, char *argv[]);
 
 
 typedef struct {
-    uint32_t vs1[VLEN/XLEN];
-    uint32_t vs2[VLEN/XLEN];
-    uint32_t vd;
-    uint32_t expected_vd;
-    uint32_t is_vfredsum;
-    uint32_t is_vfredmax;
-    uint32_t vlmul;
-    uint32_t round_mode;
-    uint32_t fp_format;
-    uint32_t is_vec;
-    uint32_t index;
+    uint32_t is_bf16;
+    uint32_t is_fp16;
+    uint32_t is_fp32;
+    uint32_t is_widen;
+    uint32_t a_in;
+    uint32_t b_in;
+    uint32_t c_in;
+    uint32_t res_out;
 } IOput;
 
 #define VLMUL8 3
@@ -36,3 +33,18 @@ typedef struct {
 #define BF16 0
 
 #endif
+
+//---- Old code of reduction ----
+// typedef struct {
+//     uint32_t vs1[VLEN/XLEN];
+//     uint32_t vs2[VLEN/XLEN];
+//     uint32_t vd;
+//     uint32_t expected_vd;
+//     uint32_t is_vfredsum;
+//     uint32_t is_vfredmax;
+//     uint32_t vlmul;
+//     uint32_t round_mode;
+//     uint32_t fp_format;
+//     uint32_t is_vec;
+//     uint32_t index;
+// } IOput;

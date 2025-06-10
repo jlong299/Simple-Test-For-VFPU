@@ -17,6 +17,7 @@ class top extends Module{
     val b_in = Input(UInt(32.W))
     val c_in = Input(UInt(32.W))
     val res_out = Output(UInt(32.W))
+    val valid_out = Output(Bool())
   })
 
   val fma = Module(new FMA_16_32)
@@ -29,6 +30,7 @@ class top extends Module{
   fma.io.b_in := io.b_in
   fma.io.c_in := io.c_in
   io.res_out := fma.io.res_out
+  io.valid_out := fma.io.valid_out
 }
 
 object topMain extends App {

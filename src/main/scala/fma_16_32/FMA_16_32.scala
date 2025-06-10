@@ -31,6 +31,7 @@ class FMA_16_32 extends Module {
     val b_in = Input(UInt(32.W))
     val c_in = Input(UInt(32.W))
     val res_out = Output(UInt(32.W))
+    val valid_out = Output(Bool())
   })
 
   val (is_bf16, is_fp16, is_fp32) = (io.is_bf16, io.is_fp16, io.is_fp32)
@@ -392,7 +393,7 @@ class FMA_16_32 extends Module {
     shift_ab_high := false.B
   }
   // Select input of shift block, ab or c.
-  val sig_adjust_subnorm_c_whole_48 = sig_adjust_subnorm_32_c(0) ## 0.U(16.W) // 48 bits
+  val sig_adjust_subnorm_c_whole_48 = sig_adjust_subnorm_32_c ## 0.U(23.W) // 48 bits
   val shift_in_whole = Mux(shift_ab_high, sig_resMul_whole_S2, sig_adjust_subnorm_c_whole_48) // 48 bits
   val shift_amount_in_whole = Mux(shift_ab_high, shift_amount_ab_high, shift_amount_c_high) // 6 bits
   val shift_out_whole = shift_right(shift_in_whole, shift_amount_in_whole) // 48 bits
@@ -683,7 +684,8 @@ class FMA_16_32 extends Module {
                             resFinal_whole32))
   
   io.res_out := Mux(res_is_32_S3, res_out_whole32, res_out_high16 ## res_out_low16)
-  
+  io.valid_out := valid_S3
+
 
   def shift(data: UInt, shift_amount: UInt, shift_right: Bool): UInt = {
     // Reverse the data when shifting left
