@@ -426,6 +426,9 @@ class FMA_16_32 extends Module {
   val ab_p_c_n_low = !resMul_sign_low_S2 && sign_c_low // ab_low > 0 && c_low < 0
   val ab_n_c_p_low = resMul_sign_low_S2 && !sign_c_low // ab_low < 0 && c_low > 0
 
+  val ab_c_diffSign_low = ab_n_c_p_low || ab_p_c_n_low
+  val ab_c_diffSign_high = ab_n_c_p_high || ab_p_c_n_high
+
   val adderIn_ab_whole_48_inv = Mux(ab_n_c_p_high, ~adderIn_ab_whole_48, adderIn_ab_whole_48)
   val adderIn_c_whole_48_inv = Mux(ab_p_c_n_high, ~adderIn_c_whole_48, adderIn_c_whole_48)
   val adderIn_ab_low_24_inv = Mux(ab_n_c_p_low, ~adderIn_ab_low_24, adderIn_ab_low_24)
@@ -436,25 +439,27 @@ class FMA_16_32 extends Module {
   val adderIn_ab_low_24_final = Mux(res_is_32_S2, adderIn_ab_whole_48_inv(23, 0), adderIn_ab_low_24_inv)
   val adderIn_c_low_24_final = Mux(res_is_32_S2, adderIn_c_whole_48_inv(23, 0), adderIn_c_low_24_inv)
 
-  // Low 24-bit adder            cout                             cin for negative addend
-  val adderOut_low_26_temp = Cat(false.B, adderIn_ab_low_24_inv, ab_n_c_p_low || ab_p_c_n_low) +
-                             Cat(false.B, adderIn_c_low_24_inv, ab_n_c_p_low || ab_p_c_n_low)
+  // Low 24-bit adder
+  val adderIn_cin_low = Mux(res_is_32_S2, ab_c_diffSign_high, ab_c_diffSign_low)
+  //                             cout                             cin for negative addend
+  val adderOut_low_26_temp = Cat(false.B, adderIn_ab_low_24_final, adderIn_cin_low) +
+                             Cat(false.B, adderIn_c_low_24_final, adderIn_cin_low)
   val adderOut_low_cout = adderOut_low_26_temp(25)
   val adderOut_low_sum = adderOut_low_26_temp(24, 1) // 24 bits
 
-  // High 24-bit adder                                         cin: low-cout (32) or negative addend (16)
-  val adderOut_high_25_temp = Cat(adderIn_ab_high_24_final, Mux(res_is_32_S2, adderOut_low_cout, ab_n_c_p_high || ab_p_c_n_high)) +
-                              Cat(adderIn_c_high_24_final, Mux(res_is_32_S2, adderOut_low_cout, ab_n_c_p_high || ab_p_c_n_high))
+  // High 24-bit adder                                      cin: low-cout (fp32) or negative addend (bf/fp16)
+  val adderOut_high_25_temp = Cat(adderIn_ab_high_24_final, Mux(res_is_32_S2, adderOut_low_cout, ab_c_diffSign_high)) +
+                              Cat(adderIn_c_high_24_final, Mux(res_is_32_S2, adderOut_low_cout, ab_c_diffSign_high))
   val adderOut_high_sum = adderOut_high_25_temp(24, 1) // 24 bits
 
-  val adderOut_low_final = Mux(adderOut_low_sum(23), ~adderOut_low_sum, adderOut_low_sum)
-  val adderOut_low_final_compensate_1 = adderOut_low_sum(23) // 负数的话，需要补偿1
-  val adderOut_high_final = Mux(adderOut_high_sum(23), ~adderOut_high_sum, adderOut_high_sum)
-  val adderOut_high_final_compensate_1 = adderOut_high_sum(23) // 负数的话，需要补偿1
+  val adderOut_low_final = Mux(ab_c_diffSign_low && adderOut_low_sum(23), ~adderOut_low_sum, adderOut_low_sum)
+  val adderOut_low_final_compensate_1 = ab_c_diffSign_low && adderOut_low_sum(23) // 负数的话，需要补偿1
+  val adderOut_high_final = Mux(ab_c_diffSign_high && adderOut_high_sum(23), ~adderOut_high_sum, adderOut_high_sum)
+  val adderOut_high_final_compensate_1 = ab_c_diffSign_high && adderOut_high_sum(23) // 负数的话，需要补偿1
   // TODO: 在下面的stage3中, 为了实现简单，故意不考虑补偿1的情况（潜在的精度影响）
 
-  val adderOut_sign_low = adderOut_low_sum(23)
-  val adderOut_sign_high = adderOut_high_sum(23)
+  val adderOut_sign_low = Mux(ab_c_diffSign_low, adderOut_low_sum(23), ab_n_c_n_low)
+  val adderOut_sign_high = Mux(ab_c_diffSign_high, adderOut_high_sum(23), ab_n_c_n_high)
 
   //--------------------------------------------------
   //---- Below is S3 (pipeline 3) stage:

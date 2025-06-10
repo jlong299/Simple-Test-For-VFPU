@@ -55,31 +55,10 @@ void fp32_print(uint32_t *src, uint64_t vlen) {
     uint64_t num_floats = vlen / 8 / sizeof(float);  
 
     for (uint64_t j = 0; j < num_floats; j++) {     // 正序遍历
-        printf("%12.4f ", fsrc[j]);
+        printf("%f ", fsrc[j]);
         if ((j + 1) % 4 == 0) {                     // 每行输出4个数
             printf("\n");
         }
-    }
-}
-
-
-void display(){
-    if(top->io_is_fp32){
-        printf("---------new sample-----------\n");
-        printf("DUT res_out:\n");
-        fp32_print(&Sim_IO.res_out, 32);
-        printf("\n");
-    }
-    else if(top->io_is_fp16){
-        printf("---------new sample-----------\n");
-        printf("DUT res_out:\n");
-        fp16_print(&Sim_IO.res_out, 32);
-    }
-    else if(top->io_is_bf16){
-        printf("---------new sample-----------\n");
-        printf("DUT res_out:\n");
-        bf16_print(&Sim_IO.res_out, 32);
-        printf("res_out16hex:%x\n", Sim_IO.res_out);
     }
 }
 
@@ -109,9 +88,33 @@ void get_expected_result() {
         printf("c = %f\n", c);
 
         float expected = a * b + c;
+        printf("Expected result (a*b+c) = HEX %x\n", *reinterpret_cast<uint32_t*>(&expected));
         printf("Expected result (a*b+c) = %f\n", expected);
     }
 }
+
+
+void display(){
+    if(top->io_is_fp32){
+        printf("---------DUT result-----------\n");
+        printf("DUT result HEX: %x\n", Sim_IO.res_out);
+        printf("DUT result :              ");
+        fp32_print(&Sim_IO.res_out, 32);
+        printf("\n");
+    }
+    else if(top->io_is_fp16){
+        printf("---------new sample-----------\n");
+        printf("DUT res_out:\n");
+        fp16_print(&Sim_IO.res_out, 32);
+    }
+    else if(top->io_is_bf16){
+        printf("---------new sample-----------\n");
+        printf("DUT res_out:\n");
+        bf16_print(&Sim_IO.res_out, 32);
+        printf("res_out16hex:%x\n", Sim_IO.res_out);
+    }
+}
+
 
 void gen_rand_input() {
     top->io_valid_in    = 1;
@@ -120,9 +123,9 @@ void gen_rand_input() {
     top->io_is_fp32     = 1;
     top->io_is_widen    = 0;
     
-    float a_in = 1.0f;
-    float b_in = 1.0f;
-    float c_in = 1.0f;
+    float a_in = 2.0f;
+    float b_in = 5.0f;
+    float c_in = -11.0f;
 
     uint32_t fp_a;     
     memcpy(&fp_a, &a_in, sizeof(float));
