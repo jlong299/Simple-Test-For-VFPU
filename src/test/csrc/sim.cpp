@@ -17,7 +17,13 @@ using namespace std;
 // ===================================================================
 // TestCase 实现
 // ===================================================================
-TestCase::TestCase(float a, float b, float c) : a_fp(a), b_fp(b), c_fp(c) {
+TestCase::TestCase(FpType format, Widen widen, float a, float b, float c) 
+    : a_fp(a), b_fp(b), c_fp(c),
+      is_fp32(format == FpType::FP32),
+      is_fp16(format == FpType::FP16),
+      is_bf16(format == FpType::BF16),
+      is_widen(widen == Widen::Yes)
+{
     memcpy(&a_bits, &a_fp, sizeof(uint32_t));
     memcpy(&b_bits, &b_fp, sizeof(uint32_t));
     memcpy(&c_bits, &c_fp, sizeof(uint32_t));
@@ -102,14 +108,11 @@ void Simulator::reset(int n) {
 }
 
 void Simulator::run_test(const TestCase& test) {
-    reset(2);
-
-    // 设置输入
     top_->io_valid_in    = 1;
-    top_->io_is_bf16     = 0;
-    top_->io_is_fp16     = 0;
-    top_->io_is_fp32     = 1;
-    top_->io_is_widen    = 0;
+    top_->io_is_fp32 = test.is_fp32;
+    top_->io_is_fp16 = test.is_fp16;
+    top_->io_is_bf16 = test.is_bf16;
+    top_->io_is_widen = test.is_widen;
     top_->io_a_in = test.a_bits;
     top_->io_b_in = test.b_bits;
     top_->io_c_in = test.c_bits;

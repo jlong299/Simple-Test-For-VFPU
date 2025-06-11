@@ -4,6 +4,19 @@
 #include <stdint.h>
 #include <memory>
 
+// 定义浮点数格式的枚举类型
+enum class FpType {
+    FP32,
+    FP16,
+    BF16
+};
+
+// 定义加宽模式的枚举类型
+enum class Widen {
+    Yes,
+    No
+};
+
 // 前向声明Verilator相关类，避免在头文件中#include "Vtop.h"
 class Vtop;
 class VerilatedContext;
@@ -17,11 +30,13 @@ class VerilatedVcdC;
 // ===================================================================
 class TestCase {
 public:
-    TestCase(float a, float b, float c);
+    TestCase(FpType format, Widen widen, float a, float b, float c);
     void print_details() const;
     bool check_result(uint32_t dut_res) const;
 
     uint32_t a_bits, b_bits, c_bits;
+    // 控制信号，由构造函数根据枚举自动生成
+    bool is_fp32, is_fp16, is_bf16, is_widen;
 
 private:
     float a_fp, b_fp, c_fp;
@@ -38,11 +53,11 @@ public:
     ~Simulator();
 
     void run_test(const TestCase& test);
+    void reset(int n);
 
 private:
     void init_vcd();
     void single_cycle();
-    void reset(int n);
     
     // Verilator核心对象
     std::unique_ptr<VerilatedContext> contextp_;
@@ -54,25 +69,4 @@ private:
 #endif
 };
 
-
-// ===================================================================
-// 旧的函数声明 (将被移除或设为私有)
-// ===================================================================
-// void sim_main(int argc, char *argv[]);
-
 #endif
-
-//---- Old code of reduction ----
-// typedef struct {
-//     uint32_t vs1[VLEN/XLEN];
-//     uint32_t vs2[VLEN/XLEN];
-//     uint32_t vd;
-//     uint32_t expected_vd;
-//     uint32_t is_vfredsum;
-//     uint32_t is_vfredmax;
-//     uint32_t vlmul;
-//     uint32_t round_mode;
-//     uint32_t fp_format;
-//     uint32_t is_vec;
-//     uint32_t index;
-// } IOput;
