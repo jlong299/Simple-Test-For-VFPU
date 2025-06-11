@@ -123,9 +123,9 @@ void gen_rand_input() {
     top->io_is_fp32     = 1;
     top->io_is_widen    = 0;
     
-    float a_in = 2.0f;
-    float b_in = 5.0f;
-    float c_in = -17.0f;
+    float a_in = -5.0f;
+    float b_in = -7.0f;
+    float c_in = -4789.0f;
 
     uint32_t fp_a;     
     memcpy(&fp_a, &a_in, sizeof(float));

@@ -398,15 +398,27 @@ class FMA_16_32 extends Module {
   val shift_amount_in_whole = Mux(shift_ab_high, shift_amount_ab_high, shift_amount_c_high) // 6 bits
   val shift_out_whole = shift_right(shift_in_whole, shift_amount_in_whole) // 48 bits
 
-  // Comparison of absolute value of ab and c
-  val sig_ab_gte_c_low = sig_resMul_low_S2 >= sig_adjust_subnorm_c_low_24
+  //---- Comparison of absolute value of ab and c ----
+  // Low
+  val compare_ab_c_low_12h = compare_12b(sig_resMul_low_S2(23, 12), sig_adjust_subnorm_c_low_24(23, 12)) //high 12b
+  val compare_ab_c_low_12l_1 = sig_resMul_low_S2(11, 0) =/= 0.U // low 12b
+  val sig_ab_gt_c_low = compare_ab_c_low_12h._1 ||  // high_12b ab > c
+                        compare_ab_c_low_12h._2 && compare_ab_c_low_12l_1 // high_12b ab == c && low_12b ab > c
   val exp_ab_gt_c_low = exp_diff_low_c_minus_ab(8)
-  val abs_ab_gte_c_low = exp_ab_gt_c_low ||
-                         exp_diff_low_ab_minus_c === 0.U && sig_ab_gte_c_low
-  val sig_ab_gte_c_whole = sig_resMul_whole_S2 >= sig_adjust_subnorm_c_whole_48
+  val abs_ab_gt_c_low = exp_ab_gt_c_low ||
+                        exp_diff_low_ab_minus_c === 0.U && sig_ab_gt_c_low
+  // Whole
+  val compare_ab_c_whole_12hh = compare_12b(sig_resMul_whole_S2(47, 36), sig_adjust_subnorm_c_whole_48(47, 36)) //high 12b
+  val compare_ab_c_whole_12hl = compare_12b(sig_resMul_whole_S2(35, 24), sig_adjust_subnorm_c_whole_48(35, 24))
+  val compare_ab_c_whole_12lh = compare_12b(sig_resMul_whole_S2(23, 12), sig_adjust_subnorm_c_whole_48(23, 12))
+  val compare_ab_c_whole_12ll_1 = sig_resMul_whole_S2(11, 0) =/= 0.U
+  val sig_ab_gt_c_whole = compare_ab_c_whole_12hh._1 ||
+                          compare_ab_c_whole_12hh._2 && compare_ab_c_whole_12hl._1 ||
+                          compare_ab_c_whole_12hh._2 && compare_ab_c_whole_12hl._2 && compare_ab_c_whole_12lh._1 ||
+                          compare_ab_c_whole_12hh._2 && compare_ab_c_whole_12hl._2 && compare_ab_c_whole_12lh._2 && compare_ab_c_whole_12ll_1
   val exp_ab_gt_c_whole = exp_diff_high_c_minus_ab(8)
-  val abs_ab_gte_c_whole = exp_ab_gt_c_whole ||
-                           exp_diff_high_ab_minus_c === 0.U && sig_ab_gte_c_whole
+  val abs_ab_gt_c_whole = exp_ab_gt_c_whole ||
+                           exp_diff_high_ab_minus_c === 0.U && sig_ab_gt_c_whole
 
   // sig_resMul_low_S2:   24  (2 + 22)
   // sig_adjust_subnorm_c_low_24: 24  (2 + 22)
@@ -440,12 +452,12 @@ class FMA_16_32 extends Module {
   val ab_c_diffSign_high = ab_n_c_p_high || ab_p_c_n_high
 
   // 对于负数，要取反加一。本设计保证让绝对值较小的那个数取反加1，这样sig结果为正数，避免了结果为负时还需要再对结果取反加一。
-  // 在ab与c符号相反的情况下，若(1) ab绝对值 >= c绝对值，c取反加一，结果符号位与ab符号位相同；
-  //                      否则(2) ab绝对值 < c绝对值，ab取反加一，结果符号位与c符号位相同。
-  val adderIn_ab_low_24_inv = Mux(ab_c_diffSign_low && !abs_ab_gte_c_low, ~adderIn_ab_low_24, adderIn_ab_low_24)
-  val adderIn_c_low_24_inv = Mux(ab_c_diffSign_low && abs_ab_gte_c_low, ~adderIn_c_low_24, adderIn_c_low_24)
-  val adderIn_ab_whole_48_inv = Mux(ab_c_diffSign_high && !abs_ab_gte_c_whole, ~adderIn_ab_whole_48, adderIn_ab_whole_48)
-  val adderIn_c_whole_48_inv = Mux(ab_c_diffSign_high && abs_ab_gte_c_whole, ~adderIn_c_whole_48, adderIn_c_whole_48)
+  // 在ab与c符号相反的情况下，若(1) ab绝对值 > c绝对值，c取反加一，结果符号位与ab符号位相同；
+  //                      否则(2) ab绝对值 <= c绝对值，ab取反加一，结果符号位与c符号位相同。
+  val adderIn_ab_low_24_inv = Mux(ab_c_diffSign_low && !abs_ab_gt_c_low, ~adderIn_ab_low_24, adderIn_ab_low_24)
+  val adderIn_c_low_24_inv = Mux(ab_c_diffSign_low && abs_ab_gt_c_low, ~adderIn_c_low_24, adderIn_c_low_24)
+  val adderIn_ab_whole_48_inv = Mux(ab_c_diffSign_high && !abs_ab_gt_c_whole, ~adderIn_ab_whole_48, adderIn_ab_whole_48)
+  val adderIn_c_whole_48_inv = Mux(ab_c_diffSign_high && abs_ab_gt_c_whole, ~adderIn_c_whole_48, adderIn_c_whole_48)
   
   val adderIn_ab_high_24_final = adderIn_ab_whole_48_inv(47, 24)
   val adderIn_c_high_24_final = adderIn_c_whole_48_inv(47, 24)
@@ -466,10 +478,10 @@ class FMA_16_32 extends Module {
   val adderOut_high_24 = adderOut_high_25_temp(24, 1) // 24 bits
 
   val adderOut_sign_low = Mux(ab_c_diffSign_low, 
-                              Mux(abs_ab_gte_c_low, resMul_sign_low_S2, sign_c_low),
+                              Mux(abs_ab_gt_c_low, resMul_sign_low_S2, sign_c_low),
                               ab_n_c_n_low)
   val adderOut_sign_high = Mux(ab_c_diffSign_high,
-                              Mux(abs_ab_gte_c_whole, resMul_sign_high_S2, sign_c_high),
+                              Mux(abs_ab_gt_c_whole, resMul_sign_high_S2, sign_c_high),
                               ab_n_c_n_high)
 
   //--------------------------------------------------
@@ -714,5 +726,29 @@ class FMA_16_32 extends Module {
   }
   def shift_left(data: UInt, shift_amount: UInt): UInt = {
     data << shift_amount
+  }
+
+  // Compare a with b (3 bits)       a>b   a==b
+  def compare_3b(a: UInt, b: UInt): (Bool, Bool) = {
+    require(a.getWidth == 3 && b.getWidth == 3)
+    val gt, eq = Wire(Vec(3, Bool()))
+    for (i <- 0 until 3) {
+      gt(i) := a(i) && !b(i)
+      eq(i) := a(i) === b(i)
+    }
+    (gt(2) || eq(2) && gt(1) || eq(2) && eq(1) && gt(0), eq.reduce(_ && _))
+  }
+  // Compare a with b (6 bits)       a>b   a==b
+  def compare_6b(a: UInt, b: UInt): (Bool, Bool) = {
+    val (high_gt, high_eq) = compare_3b(a(5, 3), b(5, 3))
+    val (low_gt, low_eq) = compare_3b(a(2, 0), b(2, 0))
+    (high_gt || high_eq && low_gt, high_eq && low_eq)
+  }
+  // Compare a with b (12 bits)       a>b   a==b
+  def compare_12b(a: UInt, b: UInt): (Bool, Bool) = {
+    require(a.getWidth == 12 && b.getWidth == 12)
+    val (high_gt, high_eq) = compare_6b(a(11, 6), b(11, 6))
+    val (low_gt, low_eq) = compare_6b(a(5, 0), b(5, 0))
+    (high_gt || high_eq && low_gt, high_eq && low_eq)
   }
 }
