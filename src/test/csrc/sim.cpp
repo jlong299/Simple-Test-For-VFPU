@@ -17,42 +17,96 @@ using namespace std;
 // ===================================================================
 // TestCase 实现
 // ===================================================================
-TestCase::TestCase(FpType format, Widen widen, float a, float b, float c) 
-    : a_fp(a), b_fp(b), c_fp(c),
-      is_fp32(format == FpType::FP32),
-      is_fp16(format == FpType::FP16),
-      is_bf16(format == FpType::BF16),
-      is_widen(widen == Widen::Yes)
-{
-    memcpy(&a_bits, &a_fp, sizeof(uint32_t));
-    memcpy(&b_bits, &b_fp, sizeof(uint32_t));
-    memcpy(&c_bits, &c_fp, sizeof(uint32_t));
 
-    float expected_fp = a_fp * b_fp + c_fp;
-    memcpy(&expected_res_bits, &expected_fp, sizeof(uint32_t));
+// FP32 single operation constructor
+TestCase::TestCase(const FMA_Operands& ops) 
+    : mode(TestMode::FP32), 
+      op_fp(ops),
+      is_fp32(true), is_fp16(false), is_bf16(false), is_widen(false)
+{
+    memcpy(&a_fp32_bits, &op_fp.a, sizeof(uint32_t));
+    memcpy(&b_fp32_bits, &op_fp.b, sizeof(uint32_t));
+    memcpy(&c_fp32_bits, &op_fp.c, sizeof(uint32_t));
+
+    float expected_fp = op_fp.a * op_fp.b + op_fp.c;
+    memcpy(&expected_res_fp32, &expected_fp, sizeof(uint32_t));
 }
+
+// FP16 dual operation constructor
+TestCase::TestCase(const FMA_Operands& op1, const FMA_Operands& op2)
+    : mode(TestMode::FP16),
+      op1_fp(op1), op2_fp(op2),
+      is_fp32(false), is_fp16(true), is_bf16(false), is_widen(false)
+{
+    // Convert and store bits for operand set 1
+    a1_fp16_bits = fp32_to_fp16(op1_fp.a);
+    b1_fp16_bits = fp32_to_fp16(op1_fp.b);
+    c1_fp16_bits = fp32_to_fp16(op1_fp.c);
+
+    // Convert and store bits for operand set 2
+    a2_fp16_bits = fp32_to_fp16(op2_fp.a);
+    b2_fp16_bits = fp32_to_fp16(op2_fp.b);
+    c2_fp16_bits = fp32_to_fp16(op2_fp.c);
+
+    // Calculate and store expected results
+    float expected_fp1 = op1_fp.a * op1_fp.b + op1_fp.c;
+    float expected_fp2 = op2_fp.a * op2_fp.b + op2_fp.c;
+    expected_res1_fp16 = fp32_to_fp16(expected_fp1);
+    expected_res2_fp16 = fp32_to_fp16(expected_fp2);
+}
+
 
 void TestCase::print_details() const {
     printf("--- Test Case ---\n");
-    printf("Inputs: a=%.4f, b=%.4f, c=%.4f\n", a_fp, b_fp, c_fp);
-    float expected_fp;
-    memcpy(&expected_fp, &expected_res_bits, sizeof(float));
-    printf("Expected: %.4f (HEX: 0x%x)\n", expected_fp, expected_res_bits);
+    switch(mode) {
+        case TestMode::FP32:
+            printf("Mode: FP32 Single\n");
+            printf("Inputs: a=%.4f, b=%.4f, c=%.4f\n", op_fp.a, op_fp.b, op_fp.c);
+            float expected_fp;
+            memcpy(&expected_fp, &expected_res_fp32, sizeof(float));
+            printf("Expected: %.4f (HEX: 0x%x)\n", expected_fp, expected_res_fp32);
+            break;
+        case TestMode::FP16:
+            printf("Mode: FP16 Dual\n");
+            printf("Inputs OP1: a=%.4f (0x%x), b=%.4f (0x%x), c=%.4f (0x%x)\n", 
+                   op1_fp.a, a1_fp16_bits, 
+                   op1_fp.b, b1_fp16_bits, 
+                   op1_fp.c, c1_fp16_bits);
+            printf("Inputs OP2: a=%.4f (0x%x), b=%.4f (0x%x), c=%.4f (0x%x)\n", 
+                   op2_fp.a, a2_fp16_bits, 
+                   op2_fp.b, b2_fp16_bits, 
+                   op2_fp.c, c2_fp16_bits);
+            printf("Expected1: %.4f (HEX: 0x%x)\n", half_to_float(expected_res1_fp16), expected_res1_fp16);
+            printf("Expected2: %.4f (HEX: 0x%x)\n", half_to_float(expected_res2_fp16), expected_res2_fp16);
+            break;
+    }
 }
 
-bool TestCase::check_result(uint32_t dut_res) const {
+bool TestCase::check_result(const DutOutputs& dut_res) const {
     printf("--- Verification ---\n");
-    float dut_res_fp;
-    memcpy(&dut_res_fp, &dut_res, sizeof(float));
-    printf("DUT Result: %.4f (HEX: 0x%x)\n", dut_res_fp, dut_res);
+    bool pass = false;
+    switch(mode) {
+        case TestMode::FP32: {
+            float dut_res_fp;
+            memcpy(&dut_res_fp, &dut_res.res_out_32, sizeof(float));
+            printf("DUT Result: %.4f (HEX: 0x%x)\n", dut_res_fp, dut_res.res_out_32);
+            pass = (dut_res.res_out_32 == expected_res_fp32);
+            break;
+        }
+        case TestMode::FP16: {
+            printf("DUT Result1: %.4f (HEX: 0x%x)\n", half_to_float(dut_res.res_out_16_0), dut_res.res_out_16_0);
+            printf("DUT Result2: %.4f (HEX: 0x%x)\n", half_to_float(dut_res.res_out_16_1), dut_res.res_out_16_1);
+            pass = (dut_res.res_out_16_0 == expected_res1_fp16) && (dut_res.res_out_16_1 == expected_res2_fp16);
+            break;
+        }
+    }
 
-    if (dut_res == expected_res_bits) {
+    if (pass) {
         printf(">>> PASSED <<<\n\n");
-        return true;
     } else {
         printf(">>> FAILED <<<\n\n");
-        return false;
     }
+    return pass;
 }
 
 // ===================================================================
@@ -108,14 +162,30 @@ void Simulator::reset(int n) {
 }
 
 void Simulator::run_test(const TestCase& test) {
-    top_->io_valid_in    = 1;
-    top_->io_is_fp32 = test.is_fp32;
-    top_->io_is_fp16 = test.is_fp16;
-    top_->io_is_bf16 = test.is_bf16;
+    // 1. 设置控制信号
+    top_->io_valid_in = 1;
+    top_->io_is_fp32  = test.is_fp32;
+    top_->io_is_fp16  = test.is_fp16;
+    top_->io_is_bf16  = test.is_bf16;
     top_->io_is_widen = test.is_widen;
-    top_->io_a_in = test.a_bits;
-    top_->io_b_in = test.b_bits;
-    top_->io_c_in = test.c_bits;
+
+    // 2. 根据模式设置数据输入端口
+    switch(test.mode) {
+        case TestMode::FP32:
+            top_->io_a_in_32 = test.a_fp32_bits;
+            top_->io_b_in_32 = test.b_fp32_bits;
+            top_->io_c_in_32 = test.c_fp32_bits;
+            break;
+        case TestMode::FP16:
+            // 注意：Verilator会把 a_in_16: Vec(2, UInt(16.W)) 转换成 io_a_in_16_0, io_a_in_16_1
+            top_->io_a_in_16_0 = test.a1_fp16_bits;
+            top_->io_b_in_16_0 = test.b1_fp16_bits;
+            top_->io_c_in_16_0 = test.c1_fp16_bits;
+            top_->io_a_in_16_1 = test.a2_fp16_bits;
+            top_->io_b_in_16_1 = test.b2_fp16_bits;
+            top_->io_c_in_16_1 = test.c2_fp16_bits;
+            break;
+    }
     
     test.print_details();
     single_cycle();
@@ -131,6 +201,12 @@ void Simulator::run_test(const TestCase& test) {
         }
     }
     
-    uint32_t dut_res = top_->io_res_out;
+    // 3. 从DUT读取所有可能的输出
+    DutOutputs dut_res;
+    dut_res.res_out_32   = top_->io_res_out_32;
+    dut_res.res_out_16_0 = top_->io_res_out_16_0;
+    dut_res.res_out_16_1 = top_->io_res_out_16_1;
+    
+    // 4. TestCase自己负责检查
     test.check_result(dut_res);
 }

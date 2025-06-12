@@ -13,10 +13,15 @@ class top extends Module{
     val valid_in = Input(Bool())
     val is_bf16, is_fp16, is_fp32 = Input(Bool())
     val is_widen = Input(Bool())
-    val a_in = Input(UInt(32.W))
-    val b_in = Input(UInt(32.W))
-    val c_in = Input(UInt(32.W))
-    val res_out = Output(UInt(32.W))
+    val a_in_32 = Input(UInt(32.W))
+    val b_in_32 = Input(UInt(32.W))
+    val c_in_32 = Input(UInt(32.W))
+    val a_in_16 = Input(Vec(2, UInt(16.W)))
+    val b_in_16 = Input(Vec(2, UInt(16.W)))
+    val c_in_16 = Input(Vec(2, UInt(16.W)))
+
+    val res_out_32 = Output(UInt(32.W))
+    val res_out_16 = Output(Vec(2, UInt(16.W)))
     val valid_out = Output(Bool())
   })
 
@@ -26,10 +31,19 @@ class top extends Module{
   fma.io.is_fp16 := io.is_fp16
   fma.io.is_fp32 := io.is_fp32
   fma.io.is_widen := io.is_widen
-  fma.io.a_in := io.a_in
-  fma.io.b_in := io.b_in
-  fma.io.c_in := io.c_in
-  io.res_out := fma.io.res_out
+
+  when(io.is_fp32) {
+    fma.io.a_in := io.a_in_32
+    fma.io.b_in := io.b_in_32
+    fma.io.c_in := io.c_in_32
+  }.otherwise {
+    fma.io.a_in := Cat(io.a_in_16(1), io.a_in_16(0))
+    fma.io.b_in := Cat(io.b_in_16(1), io.b_in_16(0))
+    fma.io.c_in := Cat(io.c_in_16(1), io.c_in_16(0))
+  }
+
+  io.res_out_32 := fma.io.res_out
+  io.res_out_16 := VecInit(fma.io.res_out(15, 0), fma.io.res_out(31, 16))
   io.valid_out := fma.io.valid_out
 }
 
