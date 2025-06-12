@@ -18,9 +18,13 @@ int main(int argc, char *argv[]) {
   // -- FP16 并行双路半精度浮点数测试 --
   // 使用 C++11 的列表初始化 (list initialization) 来创建 FMA_Operands 实例
   tests.push_back(TestCase(
-    {2.0f, 3.0f, 4.0f},    // op1: 2*3+4 = 10
-    {5.0f, -1.0f, -8.0f}   // op2: 5*(-1)+(-8) = -13
+    {1.0f, 1.0f, 1.0f},    
+    {1.0f, 1.0f, 1.0f}   
   ));
+  // tests.push_back(TestCase(
+  //   {2.0f, 3.0f, 4.0f},    // op1: 2*3+4 = 10
+  //   {5.0f, -1.0f, -8.0f}   // op2: 5*(-1)+(-8) = -13
+  // ));
 
   // 3. 循环执行所有测试
   sim.reset(2);

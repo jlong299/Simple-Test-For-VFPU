@@ -299,10 +299,10 @@ class FMA_16_32 extends Module {
   val (sign_c_high, sign_c_low) = (c_in_S2(31), c_in_S2(15))
   val widen_S2 = RegEnable(widen, valid_S1)
   val c_is_32 = !input_is_16_S2 || widen_S2
-  val c_is_fp16 = RegEnable(RegEnable(is_fp16, valid_S1), valid_S2)
+  val c_is_fp16 = RegEnable(RegEnable(is_fp16, io.valid_in), valid_S1)
   val exp_high_c, exp_low_c = Wire(UInt(8.W))
   exp_high_c := Mux(c_is_fp16 && !widen_S2, c_in_S2(30, 30-5+1), c_in_S2(30, 30-8+1))
-  exp_low_c := Mux(c_is_fp16 && !widen_S2, c_in_S2(14, 14-5+1), io.a_in(14, 14-8+1))
+  exp_low_c := Mux(c_is_fp16 && !widen_S2, c_in_S2(14, 14-5+1), c_in_S2(14, 14-8+1))
   val exp_in_c = Seq(exp_low_c, exp_high_c)
 
   val frac_high_c_16, frac_low_c_16 = Wire(UInt(10.W))
@@ -393,7 +393,7 @@ class FMA_16_32 extends Module {
     shift_ab_high := false.B
   }
   // Select input of shift block, ab or c.
-  val sig_adjust_subnorm_c_whole_48 = sig_adjust_subnorm_32_c ## 0.U(23.W) // 48 bits
+  val sig_adjust_subnorm_c_whole_48 = Mux(c_is_32, sig_adjust_subnorm_32_c ## 0.U(23.W), sig_adjust_subnorm_16_c(1) ## 0.U(36.W)) // 48 bits
   val shift_in_whole = Mux(shift_ab_high, sig_resMul_whole_S2, sig_adjust_subnorm_c_whole_48) // 48 bits
   val shift_amount_in_whole = Mux(shift_ab_high, shift_amount_ab_high, shift_amount_c_high) // 6 bits
   val shift_out_whole = shift_right(shift_in_whole, shift_amount_in_whole) // 48 bits
