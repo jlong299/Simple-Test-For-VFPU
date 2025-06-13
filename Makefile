@@ -52,7 +52,8 @@ run: $(BIN)
 	@echo
 	@echo "------------ RUN --------------"
 	$(NPC_EXEC)
-	@echo "----- if you need vcd file. add vcd=y to make ----"
+
+# @echo "----- if you need vcd file. add vcd=y to make ----"
 
 clean:
 	rm -rf $(BUILD_DIR)

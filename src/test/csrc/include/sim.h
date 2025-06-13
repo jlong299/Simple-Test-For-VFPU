@@ -79,7 +79,7 @@ public:
     Simulator(int argc, char* argv[]);
     ~Simulator();
 
-    void run_test(const TestCase& test);
+    bool run_test(const TestCase& test);
     void reset(int n);
 
 private:

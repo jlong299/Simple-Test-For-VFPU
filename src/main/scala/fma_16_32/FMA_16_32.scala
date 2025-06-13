@@ -309,10 +309,18 @@ class FMA_16_32 extends Module {
   frac_high_c_16 := Mux(c_is_fp16, c_in_S2(16+11-2, 16), Cat(c_in_S2(16+8-2, 16), 0.U(3.W)))
   frac_low_c_16 := Mux(c_is_fp16, c_in_S2(0+11-2, 0), Cat(c_in_S2(0+8-2, 0), 0.U(3.W)))
   val frac_c_32 = c_in_S2(22, 0)
-  val frac_in_c_16 = Seq(frac_low_c_16, frac_high_c_16)
+  val frac_c_16 = Seq(frac_low_c_16, frac_high_c_16)
 
   val exp_is_0_c = Wire(Vec(2, Bool()))
   exp_is_0_c zip exp_in_c foreach {case (is_0, exp) => is_0 := exp === 0.U}
+  val frac_is_0_16_c = frac_c_16.map(_ === 0.U)
+  val frac_is_0_32_c = frac_c_32 === 0.U
+  val exp_is_all1s_c = exp_in_c.map(_ === Mux(is_fp16, "b00011111".U, "b1111_1111".U))
+
+  val is_inf_16_c = exp_is_all1s_c zip frac_is_0_16_c map {case (is_all1s, is_0_frac) => is_all1s && is_0_frac}
+  val is_inf_32_c = exp_is_all1s_c(1) && frac_is_0_32_c
+  val is_inf_high_c = Mux(c_is_32, is_inf_32_c, is_inf_16_c(1))
+  val is_inf_low_c = is_inf_16_c(0)
 
   val is_subnorm_zero_16_c = exp_is_0_c
   val is_subnorm_zero_32_c = exp_is_0_c(1)
@@ -326,7 +334,7 @@ class FMA_16_32 extends Module {
   // x.xxxxxxxxxx   fp16 (1 + 10)
   val sig_adjust_subnorm_16_c = Wire(Vec(2, UInt(12.W)))
   for (i <- 0 until 2) { // c需要在整数部分多补一个0，和乘法输出保证一致
-    sig_adjust_subnorm_16_c(i) := Mux(is_subnorm_zero_c(i), 0.U(2.W), 1.U(2.W)) ## frac_in_c_16(i)
+    sig_adjust_subnorm_16_c(i) := Mux(is_subnorm_zero_c(i), 0.U(2.W), 1.U(2.W)) ## frac_c_16(i)
   }
   // x.xxxxxxxxxxxxxxxxxxxxxxx   fp32 (1 + 23)
   val sig_adjust_subnorm_32_c = Wire(UInt(25.W)) // c需要在整数部分多补一个0，和乘法输出保证一致
@@ -483,6 +491,11 @@ class FMA_16_32 extends Module {
   val adderOut_sign_high = Mux(ab_c_diffSign_high,
                               Mux(abs_ab_gt_c_whole, resMul_sign_high_S2, sign_c_high),
                               ab_n_c_n_high)
+  // 下面处理a*b或者c为inf的情况下，sign的值。但是inf + -inf = nan的情况目前未考虑                           
+  val adderOut_sign_high_preS3 = Mux(resMul_is_inf_high_S2, resMul_sign_high_S2,
+                                 Mux(is_inf_high_c, sign_c_high, adderOut_sign_high))
+  val adderOut_sign_low_preS3 = Mux(resMul_is_inf_low_S2, resMul_sign_low_S2,
+                                 Mux(is_inf_low_c, sign_c_low, adderOut_sign_low))
 
   //--------------------------------------------------
   //---- Below is S3 (pipeline 3) stage:
@@ -494,6 +507,8 @@ class FMA_16_32 extends Module {
   val res_is_32_S3 = RegEnable(res_is_32_S2, valid_S2)
   val res_is_bf16_S3 = RegEnable(res_is_bf16_S2, valid_S2)
   val res_is_fp16_S3 = RegEnable(res_is_fp16_S2, valid_S2)
+  val is_inf_low_c_S3 = RegEnable(is_inf_low_c, valid_S2)
+  val is_inf_high_c_S3 = RegEnable(is_inf_high_c, valid_S2)
   val resMul_is_zero_low_S3 = RegEnable(resMul_is_zero_low_S2, valid_S2)
   val resMul_is_zero_high_S3 = RegEnable(resMul_is_zero_high_S2, valid_S2)
   val resMul_is_inf_low_S3 = RegEnable(resMul_is_inf_low_S2, valid_S2)
@@ -504,8 +519,8 @@ class FMA_16_32 extends Module {
   val adderOut_low_S3 = RegEnable(adderOut_low_24, valid_S2) // 24 bits
   val adderOut_high_S3 = RegEnable(adderOut_high_24, valid_S2) // 24 bits
   val adderOut_whole_S3 = Cat(adderOut_high_S3, adderOut_low_S3) // 48 bits
-  val adderOut_sign_low_S3 = RegEnable(adderOut_sign_low, valid_S2)
-  val adderOut_sign_high_S3 = RegEnable(adderOut_sign_high, valid_S2)
+  val adderOut_sign_low_S3 = RegEnable(adderOut_sign_low_preS3, valid_S2)
+  val adderOut_sign_high_S3 = RegEnable(adderOut_sign_high_preS3, valid_S2)
 
   val exp_resMul_low_S3 = RegEnable(exp_resMul_low_S2, valid_S2)  // 8 bits
   val exp_resMul_high_S3 = RegEnable(exp_resMul_high_S2, valid_S2) // 8 bits
@@ -517,8 +532,10 @@ class FMA_16_32 extends Module {
   val exp_adderOut_low = Mux(exp_c_gte_ab_low_S3, exp_c_low_S3, exp_resMul_low_S3)
   val exp_adderOut_high = Mux(exp_c_gte_ab_high_S3, exp_c_high_S3, exp_resMul_high_S3)
 
-  val adderOut_is_inf_low = resMul_is_inf_low_S3 || exp_adderOut_low === Mux(res_is_fp16_S3, "b00011111".U, "b11111111".U)
-  val adderOut_is_inf_high = resMul_is_inf_high_S3 || exp_adderOut_high === Mux(res_is_fp16_S3, "b00011111".U, "b11111111".U)
+  val adderOut_is_inf_low = resMul_is_inf_low_S3 || is_inf_low_c_S3 ||
+                            exp_adderOut_low === Mux(res_is_fp16_S3, "b00011111".U, "b11111111".U)
+  val adderOut_is_inf_high = resMul_is_inf_high_S3 || is_inf_high_c_S3 ||
+                             exp_adderOut_high === Mux(res_is_fp16_S3, "b00011111".U, "b11111111".U)
   
   val adderOut_int_part_low = adderOut_low_S3(23, 22)
   val adderOut_int_part_high = adderOut_high_S3(23, 22)

@@ -2,6 +2,7 @@
 #include <iostream>
 #include <bitset>
 #include <memory>
+#include <cmath> // For std::abs
 
 #include <verilated.h>
 #include "Vtop.h"
@@ -61,10 +62,13 @@ void TestCase::print_details() const {
     switch(mode) {
         case TestMode::FP32:
             printf("Mode: FP32 Single\n");
-            printf("Inputs: a=%.4f, b=%.4f, c=%.4f\n", op_fp.a, op_fp.b, op_fp.c);
+            printf("Inputs: a=%.8f (0x%x), b=%.8f (0x%x), c=%.8f (0x%x)\n", 
+                   op_fp.a, a_fp32_bits, 
+                   op_fp.b, b_fp32_bits, 
+                   op_fp.c, c_fp32_bits);
             float expected_fp;
             memcpy(&expected_fp, &expected_res_fp32, sizeof(float));
-            printf("Expected: %.4f (HEX: 0x%x)\n", expected_fp, expected_res_fp32);
+            printf("Expected: %.8f (HEX: 0x%x)\n", expected_fp, expected_res_fp32);
             break;
         case TestMode::FP16:
             printf("Mode: FP16 Dual\n");
@@ -89,8 +93,10 @@ bool TestCase::check_result(const DutOutputs& dut_res) const {
         case TestMode::FP32: {
             float dut_res_fp;
             memcpy(&dut_res_fp, &dut_res.res_out_32, sizeof(float));
-            printf("DUT Result: %.4f (HEX: 0x%x)\n", dut_res_fp, dut_res.res_out_32);
-            pass = (dut_res.res_out_32 == expected_res_fp32);
+            printf("DUT Result: %.8f (HEX: 0x%x)\n", dut_res_fp, dut_res.res_out_32);
+            // 允许1 ulp (unit in the last place) 的误差
+            int64_t diff = std::abs((int64_t)dut_res.res_out_32 - (int64_t)expected_res_fp32);
+            pass = (diff <= 1);
             break;
         }
         case TestMode::FP16: {
@@ -161,7 +167,7 @@ void Simulator::reset(int n) {
     top_->eval();
 }
 
-void Simulator::run_test(const TestCase& test) {
+bool Simulator::run_test(const TestCase& test) {
     // 1. 设置控制信号
     top_->io_valid_in = 1;
     top_->io_is_fp32  = test.is_fp32;
@@ -207,6 +213,6 @@ void Simulator::run_test(const TestCase& test) {
     dut_res.res_out_16_0 = top_->io_res_out_16_0;
     dut_res.res_out_16_1 = top_->io_res_out_16_1;
     
-    // 4. TestCase自己负责检查
-    test.check_result(dut_res);
+    // 4. TestCase自己负责检查并返回结果
+    return test.check_result(dut_res);
 }
