@@ -9,6 +9,11 @@ struct FMA_Operands {
     float a, b, c;
 };
 
+// 定义16进制FMA操作数结构体
+struct FMA_Operands_Hex {
+    uint32_t a_hex, b_hex, c_hex;
+};
+
 // 定义测试模式的枚举类型
 enum class TestMode {
     FP32,
@@ -38,6 +43,9 @@ class TestCase {
 public:
     // 构造函数 for FP32 single operation, now using the struct
     TestCase(const FMA_Operands& ops);
+
+    // 构造函数 for FP32 single operation using hexadecimal input
+    TestCase(const FMA_Operands_Hex& ops_hex);
 
     // 构造函数 for FP16 dual operation, using the struct
     TestCase(const FMA_Operands& op1, const FMA_Operands& op2);

@@ -33,6 +33,26 @@ TestCase::TestCase(const FMA_Operands& ops)
     memcpy(&expected_res_fp32, &expected_fp, sizeof(uint32_t));
 }
 
+// FP32 single operation constructor using hexadecimal input
+TestCase::TestCase(const FMA_Operands_Hex& ops_hex) 
+    : mode(TestMode::FP32), 
+      is_fp32(true), is_fp16(false), is_bf16(false), is_widen(false)
+{
+    // 直接使用16进制值
+    a_fp32_bits = ops_hex.a_hex;
+    b_fp32_bits = ops_hex.b_hex;
+    c_fp32_bits = ops_hex.c_hex;
+
+    // 将16进制位模式转换为浮点数用于打印和计算
+    memcpy(&op_fp.a, &a_fp32_bits, sizeof(float));
+    memcpy(&op_fp.b, &b_fp32_bits, sizeof(float));
+    memcpy(&op_fp.c, &c_fp32_bits, sizeof(float));
+
+    // 计算期望结果
+    float expected_fp = op_fp.a * op_fp.b + op_fp.c;
+    memcpy(&expected_res_fp32, &expected_fp, sizeof(uint32_t));
+}
+
 // FP16 dual operation constructor
 TestCase::TestCase(const FMA_Operands& op1, const FMA_Operands& op2)
     : mode(TestMode::FP16),
@@ -61,14 +81,14 @@ void TestCase::print_details() const {
     printf("--- Test Case ---\n");
     switch(mode) {
         case TestMode::FP32:
-            printf("Mode: FP32 Single\n");
-            printf("Inputs: a=%.8f (0x%x), b=%.8f (0x%x), c=%.8f (0x%x)\n", 
-                   op_fp.a, a_fp32_bits, 
-                   op_fp.b, b_fp32_bits, 
-                   op_fp.c, c_fp32_bits);
+            printf("Mode: FP32 Single (Hex Input)\n");
+            printf("Inputs (HEX): a=0x%08X, b=0x%08X, c=0x%08X\n", 
+                   a_fp32_bits, b_fp32_bits, c_fp32_bits);
+            printf("Inputs (FP):  a=%.8f, b=%.8f, c=%.8f\n", 
+                   op_fp.a, op_fp.b, op_fp.c);
             float expected_fp;
             memcpy(&expected_fp, &expected_res_fp32, sizeof(float));
-            printf("Expected: %.8f (HEX: 0x%x)\n", expected_fp, expected_res_fp32);
+            printf("Expected: %.8f (HEX: 0x%08X)\n", expected_fp, expected_res_fp32);
             break;
         case TestMode::FP16:
             printf("Mode: FP16 Dual\n");
@@ -93,10 +113,14 @@ bool TestCase::check_result(const DutOutputs& dut_res) const {
         case TestMode::FP32: {
             float dut_res_fp;
             memcpy(&dut_res_fp, &dut_res.res_out_32, sizeof(float));
-            printf("DUT Result: %.8f (HEX: 0x%x)\n", dut_res_fp, dut_res.res_out_32);
+            printf("DUT Result: %.8f (HEX: 0x%08X)\n", dut_res_fp, dut_res.res_out_32);
             // 允许1 ulp (unit in the last place) 的误差
             int64_t diff = std::abs((int64_t)dut_res.res_out_32 - (int64_t)expected_res_fp32);
             pass = (diff <= 1);
+            if (!pass) {
+                printf("ERROR: Expected 0x%08X, Got 0x%08X, ULP diff: %ld\n", 
+                       expected_res_fp32, dut_res.res_out_32, diff);
+            }
             break;
         }
         case TestMode::FP16: {
