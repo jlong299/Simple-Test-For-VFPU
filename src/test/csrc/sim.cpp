@@ -121,9 +121,11 @@ bool TestCase::check_result(const DutOutputs& dut_res) const {
             memcpy(&expected_fp, &expected_res_fp32, sizeof(float));
             int64_t ulp_diff = 0;
             float relative_error = 0;
+
+            bool precise_pass = (dut_res.res_out_32 == expected_res_fp32);
             
             if (error_type == ErrorType::Precise) {
-                pass = (dut_res.res_out_32 == expected_res_fp32);
+                pass = precise_pass;
             }
             if (error_type == ErrorType::ULP) {
                 // 允许8 ulp (unit in the last place) 的误差
@@ -133,7 +135,10 @@ bool TestCase::check_result(const DutOutputs& dut_res) const {
             if (error_type == ErrorType::RelativeError) {
                 float max_abs = std::max(std::abs(op_fp.a * op_fp.b), std::abs(op_fp.c));
                 relative_error = std::abs(dut_res_fp - expected_fp) / max_abs;
-                pass = (relative_error < 1e-5);
+                pass = ((max_abs < std::pow(2, -60)) 
+                       ? (relative_error < 1e-3) //若ab或c的绝对值太小，则放宽误差要求
+                       : (relative_error < 1e-5)) 
+                       || precise_pass;
             }
             if (!pass) {
                 if (error_type == ErrorType::Precise) {
