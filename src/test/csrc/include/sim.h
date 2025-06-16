@@ -21,6 +21,13 @@ enum class TestMode {
     // 未来可扩展 BF16_DUAL 等
 };
 
+// 定义测试结果允许误差范围
+enum class ErrorType {
+    Precise,
+    ULP, //允许若干 ulp (unit in the last place) 的误差
+    RelativeError // 相对误差
+};
+
 // 前向声明Verilator相关类，避免在头文件中#include "Vtop.h"
 class Vtop;
 class VerilatedContext;
@@ -42,18 +49,19 @@ struct DutOutputs {
 class TestCase {
 public:
     // 构造函数 for FP32 single operation, now using the struct
-    TestCase(const FMA_Operands& ops);
+    TestCase(const FMA_Operands& ops, ErrorType error_type = ErrorType::ULP);
 
     // 构造函数 for FP32 single operation using hexadecimal input
-    TestCase(const FMA_Operands_Hex& ops_hex);
+    TestCase(const FMA_Operands_Hex& ops_hex, ErrorType error_type = ErrorType::ULP);
 
     // 构造函数 for FP16 dual operation, using the struct
-    TestCase(const FMA_Operands& op1, const FMA_Operands& op2);
+    TestCase(const FMA_Operands& op1, const FMA_Operands& op2, ErrorType error_type = ErrorType::ULP);
     
     void print_details() const;
     bool check_result(const DutOutputs& dut_res) const;
 
     TestMode mode;
+    ErrorType error_type;
 
     // --- 公共数据成员，供 Simulator 直接访问 ---
     // 控制信号

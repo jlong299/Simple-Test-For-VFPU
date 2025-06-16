@@ -20,8 +20,9 @@ using namespace std;
 // ===================================================================
 
 // FP32 single operation constructor
-TestCase::TestCase(const FMA_Operands& ops) 
+TestCase::TestCase(const FMA_Operands& ops, ErrorType error_type) 
     : mode(TestMode::FP32), 
+      error_type(error_type),
       op_fp(ops),
       is_fp32(true), is_fp16(false), is_bf16(false), is_widen(false)
 {
@@ -34,8 +35,9 @@ TestCase::TestCase(const FMA_Operands& ops)
 }
 
 // FP32 single operation constructor using hexadecimal input
-TestCase::TestCase(const FMA_Operands_Hex& ops_hex) 
+TestCase::TestCase(const FMA_Operands_Hex& ops_hex, ErrorType error_type) 
     : mode(TestMode::FP32), 
+      error_type(error_type),
       is_fp32(true), is_fp16(false), is_bf16(false), is_widen(false)
 {
     // 直接使用16进制值
@@ -54,8 +56,9 @@ TestCase::TestCase(const FMA_Operands_Hex& ops_hex)
 }
 
 // FP16 dual operation constructor
-TestCase::TestCase(const FMA_Operands& op1, const FMA_Operands& op2)
+TestCase::TestCase(const FMA_Operands& op1, const FMA_Operands& op2, ErrorType error_type)
     : mode(TestMode::FP16),
+      error_type(error_type),
       op1_fp(op1), op2_fp(op2),
       is_fp32(false), is_fp16(true), is_bf16(false), is_widen(false)
 {
@@ -114,12 +117,43 @@ bool TestCase::check_result(const DutOutputs& dut_res) const {
             float dut_res_fp;
             memcpy(&dut_res_fp, &dut_res.res_out_32, sizeof(float));
             printf("DUT Result: %.8f (HEX: 0x%08X)\n", dut_res_fp, dut_res.res_out_32);
-            // 允许1 ulp (unit in the last place) 的误差
-            int64_t diff = std::abs((int64_t)dut_res.res_out_32 - (int64_t)expected_res_fp32);
-            pass = (diff <= 1);
+            float expected_fp;
+            memcpy(&expected_fp, &expected_res_fp32, sizeof(float));
+            int64_t ulp_diff = 0;
+            float relative_error = 0;
+            
+            if (error_type == ErrorType::Precise) {
+                pass = (dut_res.res_out_32 == expected_res_fp32);
+            }
+            if (error_type == ErrorType::ULP) {
+                // 允许8 ulp (unit in the last place) 的误差
+                ulp_diff = std::abs((int64_t)dut_res.res_out_32 - (int64_t)expected_res_fp32);
+                pass = (ulp_diff <= 8);
+            }
+            if (error_type == ErrorType::RelativeError) {
+                float max_abs = std::max(std::abs(op_fp.a * op_fp.b), std::abs(op_fp.c));
+                relative_error = std::abs(dut_res_fp - expected_fp) / max_abs;
+                pass = (relative_error < 1e-5);
+            }
             if (!pass) {
-                printf("ERROR: Expected 0x%08X, Got 0x%08X, ULP diff: %ld\n", 
-                       expected_res_fp32, dut_res.res_out_32, diff);
+                if (error_type == ErrorType::Precise) {
+                    printf("ERROR: Expected 0x%08X, Got 0x%08X (Exact match required)\n", 
+                           expected_res_fp32, dut_res.res_out_32);
+                }
+                if (error_type == ErrorType::ULP) {
+                    printf("ERROR: Expected 0x%08X, Got 0x%08X, ULP diff: %ld\n", 
+                           expected_res_fp32, dut_res.res_out_32, ulp_diff);
+                }
+                if (error_type == ErrorType::RelativeError) {
+                    printf("ERROR: Expected 0x%08X, Got 0x%08X, Relative Error: %f\n", 
+                           expected_res_fp32, dut_res.res_out_32, relative_error);
+                }
+            }
+            if (error_type == ErrorType::ULP) {
+                printf("ULP diff: %ld\n", ulp_diff);
+            }
+            if (error_type == ErrorType::RelativeError) {
+                printf("Relative diff ratio: %.8e\n", relative_error);
             }
             break;
         }

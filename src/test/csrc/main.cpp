@@ -15,14 +15,14 @@ int main(int argc, char *argv[]) {
   std::vector<TestCase> tests;
   
   // -- FP32 单精度浮点数测试 --
-  // tests.push_back(TestCase({-5.0f, -7.0f, -4789.0f}));
-  // tests.push_back(TestCase({1.0f, 1.0f, 0.0f}));
-  // tests.push_back(TestCase({2.5f, 10.0f, -30.0f}));
-  // tests.push_back(TestCase({0.0f, 123.45f, 67.89f}));
-  // tests.push_back(TestCase({7955446845526908612378321670809583616.0f, -31579445546259602921911555944653783040.0f, 527182002651136.0f}));
-  // tests.push_back(TestCase(FMA_Operands_Hex{0xbf7f7861, 0x7bede2c6, 0x7bdda74b}));
-  tests.push_back(TestCase(FMA_Operands_Hex{0x58800c00, 0x58800400, 0xf1801000}));
-
+  tests.push_back(TestCase(FMA_Operands{-5.0f, -7.0f, -4789.0f}, ErrorType::Precise));
+  tests.push_back(TestCase(FMA_Operands{1.0f, 2.0f, 0.0f}, ErrorType::Precise));
+  tests.push_back(TestCase(FMA_Operands{2.5f, 10.0f, -30.0f}, ErrorType::Precise));
+  tests.push_back(TestCase(FMA_Operands{0.0f, 123.45f, 67.89f}, ErrorType::Precise));
+  tests.push_back(TestCase(FMA_Operands{5.0f, 123.0f, 67.0f}, ErrorType::Precise));
+  tests.push_back(TestCase(FMA_Operands_Hex{0x40A00000, 0x40E00000, 0xC0000000}, ErrorType::Precise));
+  tests.push_back(TestCase(FMA_Operands_Hex{0xbf7f7861, 0x7bede2c6, 0x7bdda74b}, ErrorType::ULP));
+  tests.push_back(TestCase(FMA_Operands_Hex{0x58800c00, 0x58800400, 0xf1801000}, ErrorType::RelativeError));
 
   // // -- FP32 任意值随机测试 --
   // int num_random_tests = 10000;
