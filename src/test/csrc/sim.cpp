@@ -56,21 +56,29 @@ TestCase::TestCase(const FMA_Operands_Hex& ops_hex, ErrorType error_type)
 }
 
 // FP16 dual operation constructor
-TestCase::TestCase(const FMA_Operands& op1, const FMA_Operands& op2, ErrorType error_type)
+TestCase::TestCase(const FMA_Operands_Hex_16& op1, const FMA_Operands_Hex_16& op2, ErrorType error_type)
     : mode(TestMode::FP16),
       error_type(error_type),
-      op1_fp(op1), op2_fp(op2),
       is_fp32(false), is_fp16(true), is_bf16(false), is_widen(false)
 {
     // Convert and store bits for operand set 1
-    a1_fp16_bits = fp32_to_fp16(op1_fp.a);
-    b1_fp16_bits = fp32_to_fp16(op1_fp.b);
-    c1_fp16_bits = fp32_to_fp16(op1_fp.c);
+    a1_fp16_bits = op1.a_hex;
+    b1_fp16_bits = op1.b_hex;
+    c1_fp16_bits = op1.c_hex;
 
     // Convert and store bits for operand set 2
-    a2_fp16_bits = fp32_to_fp16(op2_fp.a);
-    b2_fp16_bits = fp32_to_fp16(op2_fp.b);
-    c2_fp16_bits = fp32_to_fp16(op2_fp.c);
+    a2_fp16_bits = op2.a_hex;
+    b2_fp16_bits = op2.b_hex;
+    c2_fp16_bits = op2.c_hex;
+
+    // Convert FP16 hex values to FP32 for calculation
+    op1_fp.a = fp16_to_fp32(op1.a_hex);
+    op1_fp.b = fp16_to_fp32(op1.b_hex);
+    op1_fp.c = fp16_to_fp32(op1.c_hex);
+    
+    op2_fp.a = fp16_to_fp32(op2.a_hex);
+    op2_fp.b = fp16_to_fp32(op2.b_hex);
+    op2_fp.c = fp16_to_fp32(op2.c_hex);
 
     // Calculate and store expected results
     float expected_fp1 = op1_fp.a * op1_fp.b + op1_fp.c;
@@ -103,8 +111,8 @@ void TestCase::print_details() const {
                    op2_fp.a, a2_fp16_bits, 
                    op2_fp.b, b2_fp16_bits, 
                    op2_fp.c, c2_fp16_bits);
-            printf("Expected1: %.4f (HEX: 0x%x)\n", half_to_float(expected_res1_fp16), expected_res1_fp16);
-            printf("Expected2: %.4f (HEX: 0x%x)\n", half_to_float(expected_res2_fp16), expected_res2_fp16);
+            printf("Expected1: %.4f (HEX: 0x%x)\n", fp16_to_fp32(expected_res1_fp16), expected_res1_fp16);
+            printf("Expected2: %.4f (HEX: 0x%x)\n", fp16_to_fp32(expected_res2_fp16), expected_res2_fp16);
             break;
     }
 }
@@ -163,8 +171,8 @@ bool TestCase::check_result(const DutOutputs& dut_res) const {
             break;
         }
         case TestMode::FP16: {
-            printf("DUT Result1: %.4f (HEX: 0x%x)\n", half_to_float(dut_res.res_out_16_0), dut_res.res_out_16_0);
-            printf("DUT Result2: %.4f (HEX: 0x%x)\n", half_to_float(dut_res.res_out_16_1), dut_res.res_out_16_1);
+            printf("DUT Result1: %.4f (HEX: 0x%x)\n", fp16_to_fp32(dut_res.res_out_16_0), dut_res.res_out_16_0);
+            printf("DUT Result2: %.4f (HEX: 0x%x)\n", fp16_to_fp32(dut_res.res_out_16_1), dut_res.res_out_16_1);
             pass = (dut_res.res_out_16_0 == expected_res1_fp16) && (dut_res.res_out_16_1 == expected_res2_fp16);
             break;
         }

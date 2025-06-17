@@ -13,6 +13,9 @@ struct FMA_Operands {
 struct FMA_Operands_Hex {
     uint32_t a_hex, b_hex, c_hex;
 };
+struct FMA_Operands_Hex_16 {
+    uint16_t a_hex, b_hex, c_hex;
+};
 
 // 定义测试模式的枚举类型
 enum class TestMode {
@@ -56,6 +59,9 @@ public:
 
     // 构造函数 for FP16 dual operation, using the struct
     TestCase(const FMA_Operands& op1, const FMA_Operands& op2, ErrorType error_type = ErrorType::ULP);
+    
+    // 构造函数 for FP16 dual operation using hexadecimal input
+    TestCase(const FMA_Operands_Hex_16& op1, const FMA_Operands_Hex_16& op2, ErrorType error_type = ErrorType::ULP);
     
     void print_details() const;
     bool check_result(const DutOutputs& dut_res) const;

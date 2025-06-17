@@ -126,9 +126,7 @@ int main(int argc, char *argv[]) {
   }
 
   // // -- FP16 并行双路半精度浮点数测试 --
-  // tests.push_back(TestCase({2.0f, 3.0f, 4.0f}, {5.0f, -1.0f, -8.0f}));
-  // tests.push_back(TestCase({2.0f, 3.0f, -4.0f}, {5.0f, -7.0f, 8.0f}));
-  // tests.push_back(TestCase({-12.34f, 5.8f, 683.6f}, {-6.7f, 789.4f, 98.7f}));
+  tests.push_back(TestCase(FMA_Operands_Hex_16{0x3c00, 0x4000, 0x4000}, FMA_Operands_Hex_16{0x3c00, 0x4000, 0x4000}, ErrorType::Precise));
 
 
   // 3. 循环执行所有测试，遇到错误立即停止
