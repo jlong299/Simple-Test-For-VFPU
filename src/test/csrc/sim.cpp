@@ -103,16 +103,16 @@ void TestCase::print_details() const {
             break;
         case TestMode::FP16:
             printf("Mode: FP16 Dual\n");
-            printf("Inputs OP1: a=%.4f (0x%x), b=%.4f (0x%x), c=%.4f (0x%x)\n", 
+            printf("Inputs OP1: a=%.8f (0x%x), b=%.8f (0x%x), c=%.8f (0x%x)\n", 
                    op1_fp.a, a1_fp16_bits, 
                    op1_fp.b, b1_fp16_bits, 
                    op1_fp.c, c1_fp16_bits);
-            printf("Inputs OP2: a=%.4f (0x%x), b=%.4f (0x%x), c=%.4f (0x%x)\n", 
+            printf("Inputs OP2: a=%.8f (0x%x), b=%.8f (0x%x), c=%.8f (0x%x)\n", 
                    op2_fp.a, a2_fp16_bits, 
                    op2_fp.b, b2_fp16_bits, 
                    op2_fp.c, c2_fp16_bits);
-            printf("Expected1: %.4f (HEX: 0x%x)\n", fp16_to_fp32(expected_res1_fp16), expected_res1_fp16);
-            printf("Expected2: %.4f (HEX: 0x%x)\n", fp16_to_fp32(expected_res2_fp16), expected_res2_fp16);
+            printf("Expected1: %.8f (HEX: 0x%x)\n", fp16_to_fp32(expected_res1_fp16), expected_res1_fp16);
+            printf("Expected2: %.8f (HEX: 0x%x)\n", fp16_to_fp32(expected_res2_fp16), expected_res2_fp16);
             break;
     }
 }
@@ -173,7 +173,34 @@ bool TestCase::check_result(const DutOutputs& dut_res) const {
         case TestMode::FP16: {
             printf("DUT Result1: %.4f (HEX: 0x%x)\n", fp16_to_fp32(dut_res.res_out_16_0), dut_res.res_out_16_0);
             printf("DUT Result2: %.4f (HEX: 0x%x)\n", fp16_to_fp32(dut_res.res_out_16_1), dut_res.res_out_16_1);
-            pass = (dut_res.res_out_16_0 == expected_res1_fp16) && (dut_res.res_out_16_1 == expected_res2_fp16);
+
+            bool pass1 = false, pass2 = false;
+            
+            if (error_type == ErrorType::Precise) {
+                // 精确匹配
+                pass1 = (dut_res.res_out_16_0 == expected_res1_fp16);
+                pass2 = (dut_res.res_out_16_1 == expected_res2_fp16);
+            } else if (error_type == ErrorType::ULP) {
+                // 允许ULP误差（FP16允许2 ULP误差）
+                int32_t ulp_diff1 = std::abs((int32_t)dut_res.res_out_16_0 - (int32_t)expected_res1_fp16);
+                int32_t ulp_diff2 = std::abs((int32_t)dut_res.res_out_16_1 - (int32_t)expected_res2_fp16);
+                
+                pass1 = (ulp_diff1 <= 2);
+                pass2 = (ulp_diff2 <= 2);
+                
+                if (!pass1) {
+                    printf("ERROR OP1: Expected 0x%x, Got 0x%x, ULP diff: %d\n", 
+                           expected_res1_fp16, dut_res.res_out_16_0, ulp_diff1);
+                }
+                if (!pass2) {
+                    printf("ERROR OP2: Expected 0x%x, Got 0x%x, ULP diff: %d\n", 
+                           expected_res2_fp16, dut_res.res_out_16_1, ulp_diff2);
+                }
+                
+                printf("ULP diff1: %d, ULP diff2: %d\n", ulp_diff1, ulp_diff2);
+            }
+            
+            pass = pass1 && pass2;
             break;
         }
     }

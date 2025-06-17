@@ -42,7 +42,7 @@ BIN = $(BUILD_DIR)/$(TOP)
 NPC_EXEC := $(BIN)
 
 
-$(BIN): $(VSRCS) $(CSRCS)
+$(BIN): $(VSRCS) $(CSRCS) $(shell find ./src/test/csrc/include -name "*.h")
 	@rm -rf $(OBJ_DIR)
 	$(VERILATOR) $(VERILATOR_FLAGS) -top $(TOPNAME) $(VSRCS) $(CSRCS) \
 	$(addprefix -CFLAGS , $(CFLAGS)) $(addprefix -LDFLAGS , $(LDFLAGS)) \

@@ -8,63 +8,49 @@
 // FP16（半精度浮点数）格式：1位符号，5位指数，10位尾数
 typedef uint16_t fp16_t;
 // 将FP16转换为FP32（float）
-float fp16_to_fp32(uint16_t fp16) {
-    // 提取FP16的各个字段
-    uint32_t sign = (fp16 >> 15) & 0x1;              // 符号位
-    uint32_t exp = (fp16 >> 10) & 0x1F;              // 5位指数
-    uint32_t frac = fp16 & 0x3FF;                    // 10位尾数
+float fp16_to_fp32(fp16_t h) {
+    uint32_t sign = (h >> 15) & 0x01;
+    uint32_t exp = (h >> 10) & 0x1f;
+    uint32_t mant = h & 0x3ff;
     
-    uint32_t fp32_bits;
+    uint32_t f;
     
     if (exp == 0) {
-        // 处理零和非规格化数
-        if (frac == 0) {
-            // 零值
-            fp32_bits = (sign << 31);
+        // 非规格化数或零
+        if (mant == 0) {
+            // 零
+            f = sign << 31;
         } else {
-            // 非规格化数：需要归一化
-            // 计算前导零的数量
-            int shift = 0;
-            uint32_t temp_frac = frac;
-            while ((temp_frac & 0x400) == 0) {  // 检查第10位（隐含的1位）
-                temp_frac <<= 1;
-                shift++;
+            // 非规格化数：指数为1-15，尾数隐含0
+            while (!(mant & 0x400)) {
+                mant <<= 1;
+                exp--;
             }
-            
-            // 归一化后的指数：FP32偏置(127) - FP16偏置(15) - shift - 1
-            // = 127 - 15 - shift - 1 = 111 - shift
-            uint32_t norm_exp = 111 - shift;
-            
-            // 归一化后的尾数：移除隐含的1位
-            uint32_t norm_frac = (temp_frac & 0x3FF) << (23 - 10);  // 填充到23位
-            
-            fp32_bits = (sign << 31) | (norm_exp << 23) | norm_frac;
+            exp++;
+            mant &= 0x3ff;
+            exp = 127 - 15 + exp;
+            mant <<= 13;
+            f = (sign << 31) | (exp << 23) | mant;
         }
-    } else if (exp == 31) {
-        // 处理无穷大和NaN
-        if (frac == 0) {
+    } else if (exp == 0x1f) {
+        // 无穷大或NaN
+        if (mant == 0) {
             // 无穷大
-            fp32_bits = (sign << 31) | 0x7F800000;
+            f = (sign << 31) | (0xff << 23);
         } else {
-            // NaN：保持符号位，指数全1，尾数非零
-            fp32_bits = (sign << 31) | 0x7F800000 | (frac << (23 - 10));
+            // NaN
+            f = (sign << 31) | (0xff << 23) | (mant << 13);
         }
     } else {
-        // 正常数
-        // 指数转换：FP16指数(1-30) + FP32偏置(127) - FP16偏置(15) = exp + 112
-        uint32_t fp32_exp = exp + 112;
-        
-        // 尾数转换：从10位扩展到23位
-        uint32_t fp32_frac = frac << (23 - 10);
-        
-        fp32_bits = (sign << 31) | (fp32_exp << 23) | fp32_frac;
+        // 规格化数
+        exp = 127 - 15 + exp;
+        mant <<= 13;
+        f = (sign << 31) | (exp << 23) | mant;
     }
     
-    // 将位表示转换为float
-    float result;
-    memcpy(&result, &fp32_bits, sizeof(result));
-    return result;
+    return *(float*)&f;
 }
+
 
 // 将FP32（float）转换为FP16
 uint16_t fp32_to_fp16(float fp32) {
