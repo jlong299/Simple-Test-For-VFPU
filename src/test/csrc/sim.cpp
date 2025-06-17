@@ -80,9 +80,43 @@ TestCase::TestCase(const FMA_Operands_Hex_16& op1, const FMA_Operands_Hex_16& op
     op2_fp.b = fp16_to_fp32(op2.b_hex);
     op2_fp.c = fp16_to_fp32(op2.c_hex);
 
-    // Calculate and store expected results
-    float expected_fp1 = op1_fp.a * op1_fp.b + op1_fp.c;
-    float expected_fp2 = op2_fp.a * op2_fp.b + op2_fp.c;
+    // Calculate and store expected results with FP16 overflow handling
+    // For operand set 1
+    float mult_result1 = op1_fp.a * op1_fp.b;
+    uint16_t mult_fp16_1 = fp32_to_fp16(mult_result1);
+    uint16_t c_fp16_1 = fp32_to_fp16(op1_fp.c);
+    float expected_fp1;
+    
+    // Check if multiplication result is infinity in FP16
+    if ((mult_fp16_1 & 0x7C00) == 0x7C00 && (mult_fp16_1 & 0x03FF) == 0) {
+        // If a*b is infinity, final result is a*b (ignore c)
+        expected_fp1 = fp16_to_fp32(mult_fp16_1);
+    } else if ((c_fp16_1 & 0x7C00) == 0x7C00 && (c_fp16_1 & 0x03FF) == 0) {
+        // Otherwise, if c is infinity, final result is c (ignore a*b)
+        expected_fp1 = fp16_to_fp32(c_fp16_1);
+    } else {
+        // Normal case: perform a*b + c
+        expected_fp1 = mult_result1 + op1_fp.c;
+    }
+    
+    // For operand set 2
+    float mult_result2 = op2_fp.a * op2_fp.b;
+    uint16_t mult_fp16_2 = fp32_to_fp16(mult_result2);
+    uint16_t c_fp16_2 = fp32_to_fp16(op2_fp.c);
+    float expected_fp2;
+    
+    // Check if multiplication result is infinity in FP16
+    if ((mult_fp16_2 & 0x7C00) == 0x7C00 && (mult_fp16_2 & 0x03FF) == 0) {
+        // If a*b is infinity, final result is a*b (ignore c)
+        expected_fp2 = fp16_to_fp32(mult_fp16_2);
+    } else if ((c_fp16_2 & 0x7C00) == 0x7C00 && (c_fp16_2 & 0x03FF) == 0) {
+        // Otherwise, if c is infinity, final result is c (ignore a*b)
+        expected_fp2 = fp16_to_fp32(c_fp16_2);
+    } else {
+        // Normal case: perform a*b + c
+        expected_fp2 = mult_result2 + op2_fp.c;
+    }
+    
     expected_res1_fp16 = fp32_to_fp16(expected_fp1);
     expected_res2_fp16 = fp32_to_fp16(expected_fp2);
 }
@@ -184,7 +218,6 @@ bool TestCase::check_result(const DutOutputs& dut_res) const {
                 // 允许ULP误差（FP16允许2 ULP误差）
                 int32_t ulp_diff1 = std::abs((int32_t)dut_res.res_out_16_0 - (int32_t)expected_res1_fp16);
                 int32_t ulp_diff2 = std::abs((int32_t)dut_res.res_out_16_1 - (int32_t)expected_res2_fp16);
-                
                 pass1 = (ulp_diff1 <= 2);
                 pass2 = (ulp_diff2 <= 2);
                 
@@ -196,8 +229,41 @@ bool TestCase::check_result(const DutOutputs& dut_res) const {
                     printf("ERROR OP2: Expected 0x%x, Got 0x%x, ULP diff: %d\n", 
                            expected_res2_fp16, dut_res.res_out_16_1, ulp_diff2);
                 }
-                
                 printf("ULP diff1: %d, ULP diff2: %d\n", ulp_diff1, ulp_diff2);
+            } else if (error_type == ErrorType::RelativeError) {
+                // 相对误差检查（FP16）
+                float dut_res1_fp = fp16_to_fp32(dut_res.res_out_16_0);
+                float dut_res2_fp = fp16_to_fp32(dut_res.res_out_16_1);
+                float expected1_fp = fp16_to_fp32(expected_res1_fp16);
+                float expected2_fp = fp16_to_fp32(expected_res2_fp16);
+                
+                // 计算操作数1的相对误差
+                float max_abs1 = std::max(std::abs(op1_fp.a * op1_fp.b), std::abs(op1_fp.c));
+                float relative_error1 = std::abs(dut_res1_fp - expected1_fp) / max_abs1;
+                bool precise_pass1 = (dut_res.res_out_16_0 == expected_res1_fp16);
+                pass1 = ((max_abs1 < std::pow(2, -10))  // FP16精度较低，调整阈值
+                        ? (relative_error1 < 1e-3)      // 若ab或c的绝对值太小，则放宽误差要求
+                        : (relative_error1 < 1e-4))     // FP16相对误差要求比FP32宽松
+                        || precise_pass1;
+                
+                // 计算操作数2的相对误差
+                float max_abs2 = std::max(std::abs(op2_fp.a * op2_fp.b), std::abs(op2_fp.c));
+                float relative_error2 = std::abs(dut_res2_fp - expected2_fp) / max_abs2;
+                bool precise_pass2 = (dut_res.res_out_16_1 == expected_res2_fp16);
+                pass2 = ((max_abs2 < std::pow(2, -10))  // FP16精度较低，调整阈值
+                        ? (relative_error2 < 1e-3)      // 若ab或c的绝对值太小，则放宽误差要求
+                        : (relative_error2 < 1e-4))     // FP16相对误差要求比FP32宽松
+                        || precise_pass2;
+                
+                if (!pass1) {
+                    printf("ERROR OP1: Expected 0x%x (%.4f), Got 0x%x (%.4f), Relative Error: %e\n", 
+                           expected_res1_fp16, expected1_fp, dut_res.res_out_16_0, dut_res1_fp, relative_error1);
+                }
+                if (!pass2) {
+                    printf("ERROR OP2: Expected 0x%x (%.4f), Got 0x%x (%.4f), Relative Error: %e\n", 
+                           expected_res2_fp16, expected2_fp, dut_res.res_out_16_1, dut_res2_fp, relative_error2);
+                }
+                printf("Relative error1: %.6e, Relative error2: %.6e\n", relative_error1, relative_error2);
             }
             
             pass = pass1 && pass2;
