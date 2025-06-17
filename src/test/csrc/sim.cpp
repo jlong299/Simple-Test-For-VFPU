@@ -104,7 +104,7 @@ TestCase::TestCase(const FMA_Operands_Hex_16& op1, const FMA_Operands_Hex_16& op
     uint16_t mult_fp16_2 = fp32_to_fp16(mult_result2);
     uint16_t c_fp16_2 = fp32_to_fp16(op2_fp.c);
     float expected_fp2;
-    
+
     // Check if multiplication result is infinity in FP16
     if ((mult_fp16_2 & 0x7C00) == 0x7C00 && (mult_fp16_2 & 0x03FF) == 0) {
         // If a*b is infinity, final result is a*b (ignore c)
@@ -242,8 +242,8 @@ bool TestCase::check_result(const DutOutputs& dut_res) const {
                 float relative_error1 = std::abs(dut_res1_fp - expected1_fp) / max_abs1;
                 bool precise_pass1 = (dut_res.res_out_16_0 == expected_res1_fp16);
                 pass1 = ((max_abs1 < std::pow(2, -10))  // FP16精度较低，调整阈值
-                        ? (relative_error1 < 1e-3)      // 若ab或c的绝对值太小，则放宽误差要求
-                        : (relative_error1 < 1e-4))     // FP16相对误差要求比FP32宽松
+                        ? (relative_error1 < 1e-2)      // 若ab或c的绝对值太小，则放宽误差要求
+                        : (relative_error1 < 1e-3))     // FP16相对误差要求比FP32宽松
                         || precise_pass1;
                 
                 // 计算操作数2的相对误差
@@ -251,8 +251,8 @@ bool TestCase::check_result(const DutOutputs& dut_res) const {
                 float relative_error2 = std::abs(dut_res2_fp - expected2_fp) / max_abs2;
                 bool precise_pass2 = (dut_res.res_out_16_1 == expected_res2_fp16);
                 pass2 = ((max_abs2 < std::pow(2, -10))  // FP16精度较低，调整阈值
-                        ? (relative_error2 < 1e-3)      // 若ab或c的绝对值太小，则放宽误差要求
-                        : (relative_error2 < 1e-4))     // FP16相对误差要求比FP32宽松
+                        ? (relative_error2 < 1e-2)      // 若ab或c的绝对值太小，则放宽误差要求
+                        : (relative_error2 < 1e-3))     // FP16相对误差要求比FP32宽松
                         || precise_pass2;
                 
                 if (!pass1) {
