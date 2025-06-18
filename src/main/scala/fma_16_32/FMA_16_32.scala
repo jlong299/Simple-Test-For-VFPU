@@ -539,6 +539,7 @@ class FMA_16_32 extends Module {
   
   val adderOut_int_part_low = adderOut_low_S3(23, 22)
   val adderOut_int_part_high = adderOut_high_S3(23, 22)
+  val adderOut_isZero_low = Wire(Bool())
 
   // ---- Calculate shift amount of adder out----
   // ----  (shift direction is left) ----
@@ -560,20 +561,24 @@ class FMA_16_32 extends Module {
     adderOut_shift_amount_low := 0.U
     // 整数部分大于2时，exp需要加1，相当于减去-1
     exp_adderOut_tobe_subtracted_low := ~0.U(8.W)
+    adderOut_isZero_low := false.B
   }.elsewhen (adderOut_int_part_low(0)) { // integer part = 1
     adderOut_is_subnorm_low := false.B
     adderOut_is_inf_low_case1 := false.B
     adderOut_shift_amount_low := 1.U
     exp_adderOut_tobe_subtracted_low := 0.U
+    adderOut_isZero_low := false.B
   }.otherwise { // Integer part == 0;
     when(exp_adderOut_low_over_1 <= lzd_adderOut_low) { // exp > 1  &&  (exp-1) <= LZD of fraction
       adderOut_is_subnorm_low := true.B
       adderOut_shift_amount_low := exp_adderOut_low_over_1 + 1.U
       exp_adderOut_tobe_subtracted_low := exp_adderOut_low_over_1
+      adderOut_isZero_low := false.B
     }.otherwise {  // exp > 1  &&  (exp-1) > LZD of fraction
       adderOut_is_subnorm_low := false.B
       adderOut_shift_amount_low := lzd_adderOut_low + 2.U
       exp_adderOut_tobe_subtracted_low := lzd_adderOut_low + 1.U
+      adderOut_isZero_low := lzd_adderOut_low === 22.U
     }
     adderOut_is_inf_low_case1 := false.B
   }
@@ -706,7 +711,8 @@ class FMA_16_32 extends Module {
   require(resFinal_whole32.getWidth == 32 && resFinal_fp16_high.getWidth == 16 &&
           resFinal_fp16_low.getWidth == 16 && resFinal_bf16_high.getWidth == 16 && resFinal_bf16_low.getWidth == 16)
   val resFinal_high16 = Mux(res_is_fp16_S3, resFinal_fp16_high, resFinal_bf16_high)
-  val resFinal_low16 = Mux(res_is_fp16_S3, resFinal_fp16_low, resFinal_bf16_low)
+  val resFinal_low16_tmp = Mux(res_is_fp16_S3, resFinal_fp16_low, resFinal_bf16_low)
+  val resFinal_low16 = Mux(adderOut_isZero_low, Cat(resFinal_low16_tmp(15), 0.U(15.W)), resFinal_low16_tmp)
 
   //---- Inf ----
   val isInf_resFinal_low = adderOut_is_inf_low || adderOut_is_inf_low_case1 ||

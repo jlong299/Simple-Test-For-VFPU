@@ -16,12 +16,15 @@ struct FMA_Operands_Hex {
 struct FMA_Operands_Hex_16 {
     uint16_t a_hex, b_hex, c_hex;
 };
+struct FMA_Operands_Hex_BF16 {
+    uint16_t a_hex, b_hex, c_hex;
+};
 
 // 定义测试模式的枚举类型
 enum class TestMode {
     FP32,
-    FP16
-    // 未来可扩展 BF16_DUAL 等
+    FP16,
+    BF16
 };
 
 // 定义测试结果允许误差范围
@@ -63,6 +66,9 @@ public:
     // 构造函数 for FP16 dual operation using hexadecimal input
     TestCase(const FMA_Operands_Hex_16& op1, const FMA_Operands_Hex_16& op2, ErrorType error_type = ErrorType::ULP);
     
+    // 构造函数 for BF16 dual operation using hexadecimal input
+    TestCase(const FMA_Operands_Hex_BF16& op1, const FMA_Operands_Hex_BF16& op2, ErrorType error_type = ErrorType::ULP);
+    
     void print_details() const;
     bool check_result(const DutOutputs& dut_res) const;
 
@@ -80,6 +86,10 @@ public:
     uint16_t a1_fp16_bits, b1_fp16_bits, c1_fp16_bits;
     uint16_t a2_fp16_bits, b2_fp16_bits, c2_fp16_bits;
 
+    // BF16 模式数据
+    uint16_t a1_bf16_bits, b1_bf16_bits, c1_bf16_bits;
+    uint16_t a2_bf16_bits, b2_bf16_bits, c2_bf16_bits;
+
 private:
     // 原始浮点数值，用于打印和计算期望结果
     // FP32 - now using the struct for consistency
@@ -90,6 +100,7 @@ private:
     // 期望结果
     uint32_t expected_res_fp32;
     uint16_t expected_res1_fp16, expected_res2_fp16;
+    uint16_t expected_res1_bf16, expected_res2_bf16;
 };
 
 
