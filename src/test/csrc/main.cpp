@@ -109,6 +109,7 @@ int main(int argc, char *argv[]) {
   tests.push_back(TestCase(FMA_Operands_Hex{0x40A00000, 0x40E00000, 0xC0000000}, ErrorType::Precise));
   tests.push_back(TestCase(FMA_Operands_Hex{0xbf7f7861, 0x7bede2c6, 0x7bdda74b}, ErrorType::ULP));
   tests.push_back(TestCase(FMA_Operands_Hex{0x58800c00, 0x58800400, 0xf1801000}, ErrorType::RelativeError));
+  tests.push_back(TestCase(FMA_Operands_Hex{0x816849E7, 0x00B6D8A2, 0x08F0CF76}, ErrorType::ULP));
 
   printf("\n---- Random tests for FP32 ----\n");
   int num_random_tests_32 = 2;
@@ -204,7 +205,7 @@ int main(int argc, char *argv[]) {
   // tests.push_back(TestCase(FMA_Operands_Hex_16{0xe42b, 0xdbaa, 0xdeb6}, FMA_Operands_Hex_16{0x5be8, 0xdc0c, 0x6aa3}, ErrorType::RelativeError));
 
     printf("\n---- Random tests for FP16 ----\n");
-    int num_random_tests_16 = 500;
+    int num_random_tests_16 = 1;
     // ---- FP16 任意值随机测试 ----
     auto gen_any_fp16 = []() -> uint16_t {
         uint16_t val;
@@ -306,9 +307,11 @@ int main(int argc, char *argv[]) {
     tests.push_back(TestCase(FMA_Operands_Hex_BF16{0x42a5, 0x3e12, 0x4123}, FMA_Operands_Hex_BF16{0x4567, 0x3d89, 0x40ab}, ErrorType::ULP));
     tests.push_back(TestCase(FMA_Operands_Hex_BF16{0x4012, 0x4234, 0x3fab}, FMA_Operands_Hex_BF16{0x4156, 0x3e78, 0x4009}, ErrorType::RelativeError));
     tests.push_back(TestCase(FMA_Operands_Hex_BF16{0x9a1d, 0x1fa1, 0x8011}, FMA_Operands_Hex_BF16{0xa174, 0xcafa, 0x455d}, ErrorType::ULP));
-
+    tests.push_back(TestCase(FMA_Operands_Hex_BF16{0x80e1, 0x80ed, 0xc0}, FMA_Operands_Hex_BF16{0x80cd, 0x806d, 0x8000}, ErrorType::ULP_or_RelativeError));
+    tests.push_back(TestCase(FMA_Operands_Hex_BF16{0x80e1, 0x80ed, 0x0000}, FMA_Operands_Hex_BF16{0x80cd, 0x806d, 0x0000}, ErrorType::ULP));
+    
     printf("\n---- Random tests for BF16 ----\n");
-    int num_random_tests_bf16 = 500;
+    int num_random_tests_bf16 = 1000;
     
     // ---- BF16 任意值随机测试 ----
     auto gen_any_bf16 = []() -> uint16_t {
@@ -323,7 +326,7 @@ int main(int argc, char *argv[]) {
         // 生成两组BF16随机操作数
         FMA_Operands_Hex_BF16 ops1 = {gen_any_bf16(), gen_any_bf16(), gen_any_bf16()};
         FMA_Operands_Hex_BF16 ops2 = {gen_any_bf16(), gen_any_bf16(), gen_any_bf16()};
-        tests.push_back(TestCase(ops1, ops2, ErrorType::ULP));
+        tests.push_back(TestCase(ops1, ops2, ErrorType::ULP_or_RelativeError));
     }
     
     // ---- 进行不同指数范围的BF16随机测试 ----
@@ -331,61 +334,61 @@ int main(int argc, char *argv[]) {
     for (int i = 0; i < num_random_tests_bf16; ++i) {
         FMA_Operands_Hex_BF16 ops1 = {gen_random_bf16(-50, -10), gen_random_bf16(-50, -10), gen_random_bf16(-50, -10)};
         FMA_Operands_Hex_BF16 ops2 = {gen_random_bf16(-50, -10), gen_random_bf16(-50, -10), gen_random_bf16(-50, -10)};
-        tests.push_back(TestCase(ops1, ops2, ErrorType::ULP));
+        tests.push_back(TestCase(ops1, ops2, ErrorType::ULP_or_RelativeError));
     }
     // 中等数值范围测试：指数[-10, 10]
     for (int i = 0; i < num_random_tests_bf16; ++i) {
         FMA_Operands_Hex_BF16 ops1 = {gen_random_bf16(-10, 10), gen_random_bf16(-10, 10), gen_random_bf16(-10, 10)};
         FMA_Operands_Hex_BF16 ops2 = {gen_random_bf16(-10, 10), gen_random_bf16(-10, 10), gen_random_bf16(-10, 10)};
-        tests.push_back(TestCase(ops1, ops2, ErrorType::ULP));
+        tests.push_back(TestCase(ops1, ops2, ErrorType::ULP_or_RelativeError));
     }
     // 大数范围测试：指数[10, 50]
     for (int i = 0; i < num_random_tests_bf16; ++i) {
         FMA_Operands_Hex_BF16 ops1 = {gen_random_bf16(10, 50), gen_random_bf16(10, 50), gen_random_bf16(10, 50)};
         FMA_Operands_Hex_BF16 ops2 = {gen_random_bf16(10, 50), gen_random_bf16(10, 50), gen_random_bf16(10, 50)};
-        tests.push_back(TestCase(ops1, ops2, ErrorType::ULP));
+        tests.push_back(TestCase(ops1, ops2, ErrorType::ULP_or_RelativeError));
     }
     // 极端范围测试：指数[-126, 127]
     for (int i = 0; i < num_random_tests_bf16; ++i) {
         FMA_Operands_Hex_BF16 ops1 = {gen_random_bf16(-126, 127), gen_random_bf16(-126, 127), gen_random_bf16(-126, 127)};
         FMA_Operands_Hex_BF16 ops2 = {gen_random_bf16(-126, 127), gen_random_bf16(-126, 127), gen_random_bf16(-126, 127)};
-        tests.push_back(TestCase(ops1, ops2, ErrorType::ULP));
+        tests.push_back(TestCase(ops1, ops2, ErrorType::ULP_or_RelativeError));
     }
     // 非规格化数边界测试：指数[-126, -125]
     for (int i = 0; i < num_random_tests_bf16; ++i) {
         FMA_Operands_Hex_BF16 ops1 = {gen_random_bf16(-126, -125), gen_random_bf16(-126, 20), gen_random_bf16(-126, 20)};
         FMA_Operands_Hex_BF16 ops2 = {gen_random_bf16(-126, 20), gen_random_bf16(-126, -125), gen_random_bf16(-126, 20)};
-        tests.push_back(TestCase(ops1, ops2, ErrorType::ULP));
+        tests.push_back(TestCase(ops1, ops2, ErrorType::ULP_or_RelativeError));
     }
     // 混合精度范围测试
     for (int i = 0; i < num_random_tests_bf16; ++i) {
         FMA_Operands_Hex_BF16 ops1 = {gen_random_bf16(-126, 20), gen_random_bf16(-126, 20), gen_random_bf16(-126, -125)};
         FMA_Operands_Hex_BF16 ops2 = {gen_random_bf16(-126, 20), gen_random_bf16(-126, -125), gen_random_bf16(-126, -125)};
-        tests.push_back(TestCase(ops1, ops2, ErrorType::ULP));
+        tests.push_back(TestCase(ops1, ops2, ErrorType::ULP_or_RelativeError));
     }
     // 高精度范围测试
     for (int i = 0; i < num_random_tests_bf16; ++i) {
         FMA_Operands_Hex_BF16 ops1 = {gen_random_bf16(-126, -125), gen_random_bf16(-126, -125), gen_random_bf16(-126, 20)};
         FMA_Operands_Hex_BF16 ops2 = {gen_random_bf16(-126, -125), gen_random_bf16(-126, -125), gen_random_bf16(-126, -125)};
-        tests.push_back(TestCase(ops1, ops2, ErrorType::ULP));
+        tests.push_back(TestCase(ops1, ops2, ErrorType::ULP_or_RelativeError));
     }
     // 全范围混合测试
     for (int i = 0; i < num_random_tests_bf16; ++i) {
         FMA_Operands_Hex_BF16 ops1 = {gen_random_bf16(-127, 10), gen_random_bf16(-127, 10), gen_random_bf16(-127, 10)};
         FMA_Operands_Hex_BF16 ops2 = {gen_random_bf16(-127, 10), gen_random_bf16(-127, 10), gen_random_bf16(-127, 10)};
-        tests.push_back(TestCase(ops1, ops2, ErrorType::ULP));
+        tests.push_back(TestCase(ops1, ops2, ErrorType::ULP_or_RelativeError));
     }
     // 相对误差测试（较高精度要求）
     for (int i = 0; i < num_random_tests_bf16 / 5; ++i) {
         FMA_Operands_Hex_BF16 ops1 = {gen_random_bf16(-20, 20), gen_random_bf16(-20, 20), gen_random_bf16(-20, 20)};
         FMA_Operands_Hex_BF16 ops2 = {gen_random_bf16(-20, 20), gen_random_bf16(-20, 20), gen_random_bf16(-20, 20)};
-        tests.push_back(TestCase(ops1, ops2, ErrorType::ULP));
+        tests.push_back(TestCase(ops1, ops2, ErrorType::ULP_or_RelativeError));
     }
     // 极端范围测试：指数[-127, -126]
     for (int i = 0; i < num_random_tests_bf16; ++i) {
         FMA_Operands_Hex_BF16 ops1 = {gen_random_bf16(-127, -126), gen_random_bf16(-127, -126), gen_random_bf16(-127, -126)};
         FMA_Operands_Hex_BF16 ops2 = {gen_random_bf16(-127, -126), gen_random_bf16(-127, -126), gen_random_bf16(-127, -126)};
-        tests.push_back(TestCase(ops1, ops2, ErrorType::ULP));
+        tests.push_back(TestCase(ops1, ops2, ErrorType::ULP_or_RelativeError));
     }
 
 

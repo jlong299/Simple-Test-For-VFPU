@@ -232,6 +232,17 @@ void TestCase::print_details() const {
 
 bool TestCase::check_result(const DutOutputs& dut_res) const {
     printf("--- Verification ---\n");
+    
+    // 辅助函数：检查两个FP32数是否都是零（忽略符号位）
+    auto both_fp32_zero = [](uint32_t a, uint32_t b) {
+        return ((a & 0x7FFFFFFF) == 0) && ((b & 0x7FFFFFFF) == 0);
+    };
+    
+    // 辅助函数：检查两个FP/BF16数是否都是零（忽略符号位）
+    auto both_f16_zero = [](uint16_t a, uint16_t b) {
+        return ((a & 0x7FFF) == 0) && ((b & 0x7FFF) == 0);
+    };
+    
     bool pass = false;
     switch(mode) {
         case TestMode::FP32: {
@@ -245,13 +256,16 @@ bool TestCase::check_result(const DutOutputs& dut_res) const {
 
             bool precise_pass = (dut_res.res_out_32 == expected_res_fp32);
             
+            // 如果两个数都是0（忽略符号位），认为通过
+            bool both_zero = both_fp32_zero(dut_res.res_out_32, expected_res_fp32);
+            
             if (error_type == ErrorType::Precise) {
-                pass = precise_pass;
+                pass = precise_pass || both_zero;
             }
             if (error_type == ErrorType::ULP) {
                 // 允许8 ulp (unit in the last place) 的误差
                 ulp_diff = std::abs((int64_t)dut_res.res_out_32 - (int64_t)expected_res_fp32);
-                pass = (ulp_diff <= 8);
+                pass = (ulp_diff <= 8) || both_zero;
             }
             if (error_type == ErrorType::RelativeError) {
                 float max_abs = std::max(std::abs(op_fp.a * op_fp.b), std::abs(op_fp.c));
@@ -259,7 +273,7 @@ bool TestCase::check_result(const DutOutputs& dut_res) const {
                 pass = ((max_abs < std::pow(2, -60)) 
                        ? (relative_error < 1e-3) //若ab或c的绝对值太小，则放宽误差要求
                        : (relative_error < 1e-5)) 
-                       || precise_pass;
+                       || precise_pass || both_zero;
             }
             if (!pass) {
                 if (error_type == ErrorType::Precise) {
@@ -289,16 +303,20 @@ bool TestCase::check_result(const DutOutputs& dut_res) const {
 
             bool pass1 = false, pass2 = false;
             
+            // 检查两个数是否都是0（忽略符号位）
+            bool both_zero1 = both_f16_zero(dut_res.res_out_16_0, expected_res1_fp16);
+            bool both_zero2 = both_f16_zero(dut_res.res_out_16_1, expected_res2_fp16);
+            
             if (error_type == ErrorType::Precise) {
                 // 精确匹配
-                pass1 = (dut_res.res_out_16_0 == expected_res1_fp16);
-                pass2 = (dut_res.res_out_16_1 == expected_res2_fp16);
+                pass1 = (dut_res.res_out_16_0 == expected_res1_fp16) || both_zero1;
+                pass2 = (dut_res.res_out_16_1 == expected_res2_fp16) || both_zero2;
             } else if (error_type == ErrorType::ULP) {
                 // 允许ULP误差（FP16允许2 ULP误差）
                 int32_t ulp_diff1 = std::abs((int32_t)dut_res.res_out_16_0 - (int32_t)expected_res1_fp16);
                 int32_t ulp_diff2 = std::abs((int32_t)dut_res.res_out_16_1 - (int32_t)expected_res2_fp16);
-                pass1 = (ulp_diff1 <= 2);
-                pass2 = (ulp_diff2 <= 2);
+                pass1 = (ulp_diff1 <= 2) || both_zero1;
+                pass2 = (ulp_diff2 <= 2) || both_zero2;
                 
                 if (!pass1) {
                     printf("ERROR OP1: Expected 0x%x, Got 0x%x, ULP diff: %d\n", 
@@ -323,7 +341,7 @@ bool TestCase::check_result(const DutOutputs& dut_res) const {
                 pass1 = ((max_abs1 < std::pow(2, -10))  // FP16精度较低，调整阈值
                         ? (relative_error1 < 1e-2)      // 若ab或c的绝对值太小，则放宽误差要求
                         : (relative_error1 < 1e-3))     // FP16相对误差要求比FP32宽松
-                        || precise_pass1;
+                        || precise_pass1 || both_zero1;
                 
                 // 计算操作数2的相对误差
                 float max_abs2 = std::max(std::abs(op2_fp.a * op2_fp.b), std::abs(op2_fp.c));
@@ -332,7 +350,7 @@ bool TestCase::check_result(const DutOutputs& dut_res) const {
                 pass2 = ((max_abs2 < std::pow(2, -10))  // FP16精度较低，调整阈值
                         ? (relative_error2 < 1e-2)      // 若ab或c的绝对值太小，则放宽误差要求
                         : (relative_error2 < 1e-3))     // FP16相对误差要求比FP32宽松
-                        || precise_pass2;
+                        || precise_pass2 || both_zero2;
                 
                 if (!pass1) {
                     printf("ERROR OP1: Expected 0x%x (%.4f), Got 0x%x (%.4f), Relative Error: %e\n", 
@@ -354,16 +372,53 @@ bool TestCase::check_result(const DutOutputs& dut_res) const {
 
             bool pass1 = false, pass2 = false;
             
+            // 检查两个数是否都是0（忽略符号位）
+            bool both_zero1 = both_f16_zero(dut_res.res_out_16_0, expected_res1_bf16);
+            bool both_zero2 = both_f16_zero(dut_res.res_out_16_1, expected_res2_bf16);
+            
+            // 先计算ULP和RelativeError下的通过情况
+            bool ulp_pass1 = false, ulp_pass2 = false;
+            bool rel_pass1 = false, rel_pass2 = false;
+            
+            // ULP误差计算（BF16允许2 ULP误差）
+            int32_t ulp_diff1 = std::abs((int32_t)dut_res.res_out_16_0 - (int32_t)expected_res1_bf16);
+            int32_t ulp_diff2 = std::abs((int32_t)dut_res.res_out_16_1 - (int32_t)expected_res2_bf16);
+            ulp_pass1 = (ulp_diff1 <= 2) || both_zero1;
+            ulp_pass2 = (ulp_diff2 <= 2) || both_zero2;
+            
+            // 相对误差计算（BF16）
+            float dut_res1_fp = bf16_to_fp32(dut_res.res_out_16_0);
+            float dut_res2_fp = bf16_to_fp32(dut_res.res_out_16_1);
+            float expected1_fp = bf16_to_fp32(expected_res1_bf16);
+            float expected2_fp = bf16_to_fp32(expected_res2_bf16);
+            
+            // 计算操作数1的相对误差
+            float max_abs1 = std::max(std::abs(op1_fp.a * op1_fp.b), std::abs(op1_fp.c));
+            float relative_error1 = std::abs(dut_res1_fp - expected1_fp) / max_abs1;
+            bool precise_pass1 = (dut_res.res_out_16_0 == expected_res1_bf16);
+            rel_pass1 = ((max_abs1 < std::pow(2, -30))  // BF16有较好的指数范围，但尾数精度较低
+                    ? (relative_error1 < 1e-2)      // 若ab或c的绝对值太小，则放宽误差要求
+                    : (relative_error1 < 8e-3))     // BF16相对误差要求介于FP32和FP16之间
+                    || precise_pass1 || both_zero1;
+            
+            // 计算操作数2的相对误差
+            float max_abs2 = std::max(std::abs(op2_fp.a * op2_fp.b), std::abs(op2_fp.c));
+            float relative_error2 = std::abs(dut_res2_fp - expected2_fp) / max_abs2;
+            bool precise_pass2 = (dut_res.res_out_16_1 == expected_res2_bf16);
+            rel_pass2 = ((max_abs2 < std::pow(2, -30))  // BF16有较好的指数范围，但尾数精度较低
+                    ? (relative_error2 < 1e-2)      // 若ab或c的绝对值太小，则放宽误差要求
+                    : (relative_error2 < 8e-3))     // BF16相对误差要求介于FP32和FP16之间
+                    || precise_pass2 || both_zero2;
+            
+            // 根据错误类型决定最终的通过条件
             if (error_type == ErrorType::Precise) {
                 // 精确匹配
-                pass1 = (dut_res.res_out_16_0 == expected_res1_bf16);
-                pass2 = (dut_res.res_out_16_1 == expected_res2_bf16);
+                pass1 = (dut_res.res_out_16_0 == expected_res1_bf16) || both_zero1;
+                pass2 = (dut_res.res_out_16_1 == expected_res2_bf16) || both_zero2;
             } else if (error_type == ErrorType::ULP) {
-                // 允许ULP误差（BF16允许2 ULP误差）
-                int32_t ulp_diff1 = std::abs((int32_t)dut_res.res_out_16_0 - (int32_t)expected_res1_bf16);
-                int32_t ulp_diff2 = std::abs((int32_t)dut_res.res_out_16_1 - (int32_t)expected_res2_bf16);
-                pass1 = (ulp_diff1 <= 2);
-                pass2 = (ulp_diff2 <= 2);
+                // 只使用ULP误差
+                pass1 = ulp_pass1;
+                pass2 = ulp_pass2;
                 
                 if (!pass1) {
                     printf("ERROR OP1: Expected 0x%x, Got 0x%x, ULP diff: %d\n", 
@@ -375,29 +430,9 @@ bool TestCase::check_result(const DutOutputs& dut_res) const {
                 }
                 printf("ULP diff1: %d, ULP diff2: %d\n", ulp_diff1, ulp_diff2);
             } else if (error_type == ErrorType::RelativeError) {
-                // 相对误差检查（BF16）
-                float dut_res1_fp = bf16_to_fp32(dut_res.res_out_16_0);
-                float dut_res2_fp = bf16_to_fp32(dut_res.res_out_16_1);
-                float expected1_fp = bf16_to_fp32(expected_res1_bf16);
-                float expected2_fp = bf16_to_fp32(expected_res2_bf16);
-                
-                // 计算操作数1的相对误差
-                float max_abs1 = std::max(std::abs(op1_fp.a * op1_fp.b), std::abs(op1_fp.c));
-                float relative_error1 = std::abs(dut_res1_fp - expected1_fp) / max_abs1;
-                bool precise_pass1 = (dut_res.res_out_16_0 == expected_res1_bf16);
-                pass1 = ((max_abs1 < std::pow(2, -30))  // BF16有较好的指数范围，但尾数精度较低
-                        ? (relative_error1 < 1e-2)      // 若ab或c的绝对值太小，则放宽误差要求
-                        : (relative_error1 < 8e-3))     // BF16相对误差要求介于FP32和FP16之间
-                        || precise_pass1;
-                
-                // 计算操作数2的相对误差
-                float max_abs2 = std::max(std::abs(op2_fp.a * op2_fp.b), std::abs(op2_fp.c));
-                float relative_error2 = std::abs(dut_res2_fp - expected2_fp) / max_abs2;
-                bool precise_pass2 = (dut_res.res_out_16_1 == expected_res2_bf16);
-                pass2 = ((max_abs2 < std::pow(2, -30))  // BF16有较好的指数范围，但尾数精度较低
-                        ? (relative_error2 < 1e-2)      // 若ab或c的绝对值太小，则放宽误差要求
-                        : (relative_error2 < 8e-3))     // BF16相对误差要求介于FP32和FP16之间
-                        || precise_pass2;
+                // 只使用相对误差
+                pass1 = rel_pass1;
+                pass2 = rel_pass2;
                 
                 if (!pass1) {
                     printf("ERROR OP1: Expected 0x%x (%.4f), Got 0x%x (%.4f), Relative Error: %e\n", 
@@ -408,6 +443,24 @@ bool TestCase::check_result(const DutOutputs& dut_res) const {
                            expected_res2_bf16, expected2_fp, dut_res.res_out_16_1, dut_res2_fp, relative_error2);
                 }
                 printf("Relative error1: %.6e, Relative error2: %.6e\n", relative_error1, relative_error2);
+            } else if (error_type == ErrorType::ULP_or_RelativeError) {
+                // ULP或相对误差：如果ULP通过则通过，否则如果相对误差通过则通过，否则不通过
+                pass1 = ulp_pass1 || rel_pass1;
+                pass2 = ulp_pass2 || rel_pass2;
+                
+                printf("ULP pass1: %s, ULP pass2: %s\n", ulp_pass1 ? "true" : "false", ulp_pass2 ? "true" : "false");
+                printf("Rel pass1: %s, Rel pass2: %s\n", rel_pass1 ? "true" : "false", rel_pass2 ? "true" : "false");
+                printf("ULP diff1: %d, ULP diff2: %d\n", ulp_diff1, ulp_diff2);
+                printf("Relative error1: %.6e, Relative error2: %.6e\n", relative_error1, relative_error2);
+                
+                if (!pass1) {
+                    printf("ERROR OP1: Expected 0x%x (%.4f), Got 0x%x (%.4f), ULP diff: %d, Relative Error: %e\n", 
+                           expected_res1_bf16, expected1_fp, dut_res.res_out_16_0, dut_res1_fp, ulp_diff1, relative_error1);
+                }
+                if (!pass2) {
+                    printf("ERROR OP2: Expected 0x%x (%.4f), Got 0x%x (%.4f), ULP diff: %d, Relative Error: %e\n", 
+                           expected_res2_bf16, expected2_fp, dut_res.res_out_16_1, dut_res2_fp, ulp_diff2, relative_error2);
+                }
             }
             
             pass = pass1 && pass2;

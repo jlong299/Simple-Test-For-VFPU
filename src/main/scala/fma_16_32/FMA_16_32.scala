@@ -539,7 +539,7 @@ class FMA_16_32 extends Module {
   
   val adderOut_int_part_low = adderOut_low_S3(23, 22)
   val adderOut_int_part_high = adderOut_high_S3(23, 22)
-  val adderOut_isZero_low = Wire(Bool())
+  val adderOut_isZero_low, adderOut_isZero_high = Wire(Bool())
 
   // ---- Calculate shift amount of adder out----
   // ----  (shift direction is left) ----
@@ -593,20 +593,24 @@ class FMA_16_32 extends Module {
     adderOut_shift_amount_high := 0.U
     // 整数部分大于2时，exp需要加1，相当于减去-1
     exp_adderOut_tobe_subtracted_high := ~0.U(8.W)
+    adderOut_isZero_high := false.B
   }.elsewhen (adderOut_int_part_high(0)) { // integer part = 1
     adderOut_is_subnorm_high := false.B
     adderOut_is_inf_high_case1 := false.B
     adderOut_shift_amount_high := 1.U
     exp_adderOut_tobe_subtracted_high := 0.U
+    adderOut_isZero_high := false.B
   }.otherwise { // Integer part == 0;
     when(exp_adderOut_high_over_1 <= lzd_adderOut_high_or_whole) { // exp > 1  &&  (exp-1) <= LZD of fraction
       adderOut_is_subnorm_high := true.B
       adderOut_shift_amount_high := exp_adderOut_high_over_1 + 1.U
       exp_adderOut_tobe_subtracted_high := exp_adderOut_high_over_1
+      adderOut_isZero_high := false.B
     }.otherwise {  // exp > 1  &&  (exp-1) > LZD of fraction
       adderOut_is_subnorm_high := false.B
       adderOut_shift_amount_high := lzd_adderOut_high_or_whole + 2.U
       exp_adderOut_tobe_subtracted_high := lzd_adderOut_high_or_whole + 1.U
+      adderOut_isZero_high := lzd_adderOut_high_or_whole === Mux(res_is_32_S3, 46.U, 22.U)
     }
     adderOut_is_inf_high_case1 := false.B
   }
@@ -703,14 +707,16 @@ class FMA_16_32 extends Module {
   //-----------------------
   //---- Final result -----
   //-----------------------
-  val resFinal_whole32 = Cat(sign_resFinal_whole32, exp_resFinal_whole32, sig_resFinal_whole32(22, 0))
+  val resFinal_whole32_tmp = Cat(sign_resFinal_whole32, exp_resFinal_whole32, sig_resFinal_whole32(22, 0))
+  val resFinal_whole32 = Mux(adderOut_isZero_high, Cat(resFinal_whole32_tmp(31), 0.U(31.W)), resFinal_whole32_tmp)
   val resFinal_fp16_high = Cat(sign_resFinal_high_fp16, exp_resFinal_high_fp16(4, 0), sig_resFinal_high_fp16(9, 0))
   val resFinal_fp16_low = Cat(sign_resFinal_low_fp16, exp_resFinal_low_fp16(4, 0), sig_resFinal_low_fp16(9, 0))
   val resFinal_bf16_high = Cat(sign_resFinal_high_bf16, exp_resFinal_high_bf16, sig_resFinal_high_bf16(6, 0))
   val resFinal_bf16_low = Cat(sign_resFinal_low_bf16, exp_resFinal_low_bf16, sig_resFinal_low_bf16(6, 0))
-  require(resFinal_whole32.getWidth == 32 && resFinal_fp16_high.getWidth == 16 &&
+  require(resFinal_whole32_tmp.getWidth == 32 && resFinal_fp16_high.getWidth == 16 &&
           resFinal_fp16_low.getWidth == 16 && resFinal_bf16_high.getWidth == 16 && resFinal_bf16_low.getWidth == 16)
-  val resFinal_high16 = Mux(res_is_fp16_S3, resFinal_fp16_high, resFinal_bf16_high)
+  val resFinal_high16_tmp = Mux(res_is_fp16_S3, resFinal_fp16_high, resFinal_bf16_high)
+  val resFinal_high16 = Mux(adderOut_isZero_high, Cat(resFinal_high16_tmp(15), 0.U(15.W)), resFinal_high16_tmp)
   val resFinal_low16_tmp = Mux(res_is_fp16_S3, resFinal_fp16_low, resFinal_bf16_low)
   val resFinal_low16 = Mux(adderOut_isZero_low, Cat(resFinal_low16_tmp(15), 0.U(15.W)), resFinal_low16_tmp)
 

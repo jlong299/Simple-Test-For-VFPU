@@ -31,7 +31,8 @@ enum class TestMode {
 enum class ErrorType {
     Precise,
     ULP, //允许若干 ulp (unit in the last place) 的误差
-    RelativeError // 相对误差
+    RelativeError, // 相对误差
+    ULP_or_RelativeError // 允许若干 ulp 或 相对误差
 };
 
 // 前向声明Verilator相关类，避免在头文件中#include "Vtop.h"
