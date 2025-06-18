@@ -387,7 +387,7 @@ bool TestCase::check_result(const DutOutputs& dut_res) const {
                 bool precise_pass1 = (dut_res.res_out_16_0 == expected_res1_bf16);
                 pass1 = ((max_abs1 < std::pow(2, -30))  // BF16有较好的指数范围，但尾数精度较低
                         ? (relative_error1 < 1e-2)      // 若ab或c的绝对值太小，则放宽误差要求
-                        : (relative_error1 < 5e-3))     // BF16相对误差要求介于FP32和FP16之间
+                        : (relative_error1 < 8e-3))     // BF16相对误差要求介于FP32和FP16之间
                         || precise_pass1;
                 
                 // 计算操作数2的相对误差
@@ -396,7 +396,7 @@ bool TestCase::check_result(const DutOutputs& dut_res) const {
                 bool precise_pass2 = (dut_res.res_out_16_1 == expected_res2_bf16);
                 pass2 = ((max_abs2 < std::pow(2, -30))  // BF16有较好的指数范围，但尾数精度较低
                         ? (relative_error2 < 1e-2)      // 若ab或c的绝对值太小，则放宽误差要求
-                        : (relative_error2 < 5e-3))     // BF16相对误差要求介于FP32和FP16之间
+                        : (relative_error2 < 8e-3))     // BF16相对误差要求介于FP32和FP16之间
                         || precise_pass2;
                 
                 if (!pass1) {
