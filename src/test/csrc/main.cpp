@@ -112,7 +112,7 @@ int main(int argc, char *argv[]) {
   tests.push_back(TestCase(FMA_Operands_Hex{0x816849E7, 0x00B6D8A2, 0x08F0CF76}, ErrorType::ULP));
 
   printf("\n---- Random tests for FP32 ----\n");
-  int num_random_tests_32 = 2;
+  int num_random_tests_32 = 500;
   // ---- FP32 任意值随机测试 ----
   auto gen_any_float = []() -> float {
       union {
@@ -205,7 +205,7 @@ int main(int argc, char *argv[]) {
   // tests.push_back(TestCase(FMA_Operands_Hex_16{0xe42b, 0xdbaa, 0xdeb6}, FMA_Operands_Hex_16{0x5be8, 0xdc0c, 0x6aa3}, ErrorType::RelativeError));
 
     printf("\n---- Random tests for FP16 ----\n");
-    int num_random_tests_16 = 1;
+    int num_random_tests_16 = 500;
     // ---- FP16 任意值随机测试 ----
     auto gen_any_fp16 = []() -> uint16_t {
         uint16_t val;
@@ -309,9 +309,10 @@ int main(int argc, char *argv[]) {
     tests.push_back(TestCase(FMA_Operands_Hex_BF16{0x9a1d, 0x1fa1, 0x8011}, FMA_Operands_Hex_BF16{0xa174, 0xcafa, 0x455d}, ErrorType::ULP));
     tests.push_back(TestCase(FMA_Operands_Hex_BF16{0x80e1, 0x80ed, 0xc0}, FMA_Operands_Hex_BF16{0x80cd, 0x806d, 0x8000}, ErrorType::ULP_or_RelativeError));
     tests.push_back(TestCase(FMA_Operands_Hex_BF16{0x80e1, 0x80ed, 0x0000}, FMA_Operands_Hex_BF16{0x80cd, 0x806d, 0x0000}, ErrorType::ULP));
+    tests.push_back(TestCase(FMA_Operands_Hex_BF16{0xbf80, 0x0200, 0x0200}, FMA_Operands_Hex_BF16{0xbf80, 0x0200, 0x0200}, ErrorType::ULP));
     
     printf("\n---- Random tests for BF16 ----\n");
-    int num_random_tests_bf16 = 1000;
+    int num_random_tests_bf16 = 500;
     
     // ---- BF16 任意值随机测试 ----
     auto gen_any_bf16 = []() -> uint16_t {
