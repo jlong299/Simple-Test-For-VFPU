@@ -9,24 +9,16 @@
 // 生成指定指数范围的随机浮点数
 // exp_min: 最小指数（无偏置）
 // exp_max: 最大指数（无偏置）
-// 返回: 随机生成的32位浮点数
-float gen_random_fp32(int exp_min, int exp_max) {
-    union {
-        float f;
-        uint32_t i;
-    } val;
-    
+// 返回: 随机生成的32位浮点数的位表示
+uint32_t gen_random_fp32(int exp_min, int exp_max) {
     // 随机生成符号位 (1位)
     uint32_t sign = (rand() & 1) << 31;
     
     // 随机生成指数，范围[exp_min, exp_max]
     // IEEE 754偏置为127
     int exp_unbiased = exp_min + (rand() % (exp_max - exp_min + 1));
-    printf("exp_min: %d, exp_unbiased: %d\n", exp_min, exp_unbiased);
     uint32_t exp_biased = (exp_unbiased + 127) & 0xFF; // 加偏置并限制在8位
     uint32_t exp = exp_biased << 23;
-    printf("exp_biased: %u\n", exp_biased);
-    printf("exp: 0x%08X\n", exp);
     
     // 随机生成23位尾数，拆分多部分以确保充分随机性
     // 23位拆分为: 8位 + 8位 + 7位
@@ -36,9 +28,9 @@ float gen_random_fp32(int exp_min, int exp_max) {
     uint32_t mantissa = mantissa_part1 | mantissa_part2 | mantissa_part3;
     
     // 组合成完整的32位浮点数
-    val.i = sign | exp | mantissa;
+    uint32_t result = sign | exp | mantissa;
     
-    return val.f;
+    return result;
 }
 
 // 生成指定指数范围的随机半精度浮点数
@@ -93,6 +85,39 @@ uint16_t gen_random_bf16(int exp_min, int exp_max) {
     return bf16_bits;
 }
 
+// 生成任意随机的32位浮点数 (排除NaN)
+uint32_t gen_any_fp32() {
+    union {
+        float f;
+        uint32_t i;
+    } val;
+    // rand() 通常最多返回 16-bit, 合并两个以获得完整的32-bit随机数
+    do {
+        val.i = ((uint32_t)rand() << 16) | (uint32_t)rand();
+    } while (std::isnan(val.f));
+    return val.i;
+}
+
+// 生成任意随机的16位浮点数 (排除NaN)
+uint16_t gen_any_fp16() {
+    uint16_t val;
+    // 生成完全随机的16位数值
+    do {
+        val = (uint16_t)rand();
+    } while ((val & 0x7C00) == 0x7C00 && (val & 0x03FF) != 0); // 避免NaN值
+    return val;
+}
+
+// 生成任意随机的BF16浮点数 (排除NaN)
+uint16_t gen_any_bf16() {
+    uint16_t val;
+    // 生成完全随机的16位数值
+    do {
+        val = (uint16_t)rand();
+    } while ((val & 0x7F80) == 0x7F80 && (val & 0x007F) != 0); // 避免NaN值
+    return val;
+}
+
 int main(int argc, char *argv[]) {
   // 1. 初始化仿真器
   Simulator sim(argc, argv);
@@ -109,13 +134,13 @@ int main(int argc, char *argv[]) {
   
   if (test_fp32) {
   // -- FP32 单精度浮点数测试 --
-  tests.push_back(TestCase(FMA_Operands{-5.0f, -7.0f, -4789.0f}, ErrorType::Precise));
-  tests.push_back(TestCase(FMA_Operands{1.0f, 2.0f, 0.0f}, ErrorType::Precise));
-  tests.push_back(TestCase(FMA_Operands{2.5f, 10.0f, -30.0f}, ErrorType::Precise));
-  tests.push_back(TestCase(FMA_Operands{0.0f, 123.45f, 67.89f}, ErrorType::Precise));
-  tests.push_back(TestCase(FMA_Operands{-123.45, 0.0f, 67.89f}, ErrorType::Precise));
-  tests.push_back(TestCase(FMA_Operands{123.0f, -67.0f, 0.0f}, ErrorType::Precise));
-  tests.push_back(TestCase(FMA_Operands{5.0f, 123.0f, 67.0f}, ErrorType::Precise));
+  tests.push_back(TestCase(FMA_Operands_Hex{0xC0A00000, 0xC0E00000, 0xC595C000}, ErrorType::Precise)); // -5.0f, -7.0f, -4789.0f
+  tests.push_back(TestCase(FMA_Operands_Hex{0x3F800000, 0x40000000, 0x00000000}, ErrorType::Precise)); // 1.0f, 2.0f, 0.0f
+  tests.push_back(TestCase(FMA_Operands_Hex{0x40200000, 0x41200000, 0xC1F00000}, ErrorType::Precise)); // 2.5f, 10.0f, -30.0f
+  tests.push_back(TestCase(FMA_Operands_Hex{0x00000000, 0x42F6E666, 0x4287A3D7}, ErrorType::Precise)); // 0.0f, 123.45f, 67.89f
+  tests.push_back(TestCase(FMA_Operands_Hex{0xC2F6E666, 0x00000000, 0x4287A3D7}, ErrorType::Precise)); // -123.45f, 0.0f, 67.89f
+  tests.push_back(TestCase(FMA_Operands_Hex{0x42F60000, 0xC2860000, 0x00000000}, ErrorType::Precise)); // 123.0f, -67.0f, 0.0f
+  tests.push_back(TestCase(FMA_Operands_Hex{0x40A00000, 0x42F60000, 0x42860000}, ErrorType::Precise)); // 5.0f, 123.0f, 67.0f
   tests.push_back(TestCase(FMA_Operands_Hex{0x40A00000, 0x40E00000, 0xC0000000}, ErrorType::Precise));
   tests.push_back(TestCase(FMA_Operands_Hex{0xbf7f7861, 0x7bede2c6, 0x7bdda74b}, ErrorType::ULP));
   tests.push_back(TestCase(FMA_Operands_Hex{0x58800c00, 0x58800400, 0xf1801000}, ErrorType::RelativeError));
@@ -124,69 +149,55 @@ int main(int argc, char *argv[]) {
   printf("\n---- Random tests for FP32 ----\n");
   int num_random_tests_32 = 200;
   // ---- FP32 任意值随机测试 ----
-  auto gen_any_float = []() -> float {
-      union {
-          float f;
-          uint32_t i;
-      } val;
-      // rand() 通常最多返回 16-bit, 合并两个以获得完整的32-bit随机数
-      do {
-          val.i = ((uint32_t)rand() << 16) | (uint32_t)rand();
-      } while (std::isnan(val.f));
-      return val.f;
-  };
-
   for (int i = 0; i < num_random_tests_32; ++i) {
-      FMA_Operands ops = {gen_any_float(), gen_any_float(), gen_any_float()};
+      FMA_Operands_Hex ops = {gen_any_fp32(), gen_any_fp32(), gen_any_fp32()};
       tests.push_back(TestCase(ops, ErrorType::RelativeError));
   }
-  //---------------------------------------------------------------
-
   // ---- 进行不同指数范围的测试 ----
   // 小数范围测试：指数[-50, -10]
   for (int i = 0; i < num_random_tests_32; ++i) {
-      FMA_Operands ops = {gen_random_fp32(-50, -10), gen_random_fp32(-50, -10), gen_random_fp32(-50, -10)};
+      FMA_Operands_Hex ops = {gen_random_fp32(-50, -10), gen_random_fp32(-50, -10), gen_random_fp32(-50, -10)};
       tests.push_back(TestCase(ops, ErrorType::RelativeError));
   }
   // 中等数值范围测试：指数[-10, 10]
   for (int i = 0; i < num_random_tests_32; ++i) {
-      FMA_Operands ops = {gen_random_fp32(-10, 10), gen_random_fp32(-10, 10), gen_random_fp32(-10, 10)};
+      FMA_Operands_Hex ops = {gen_random_fp32(-10, 10), gen_random_fp32(-10, 10), gen_random_fp32(-10, 10)};
       tests.push_back(TestCase(ops, ErrorType::RelativeError));
   }
   // 大数范围测试：指数[10, 50]
   for (int i = 0; i < num_random_tests_32; ++i) {
-      FMA_Operands ops = {gen_random_fp32(10, 50), gen_random_fp32(10, 50), gen_random_fp32(10, 50)};
+      FMA_Operands_Hex ops = {gen_random_fp32(10, 50), gen_random_fp32(10, 50), gen_random_fp32(10, 50)};
       tests.push_back(TestCase(ops, ErrorType::RelativeError));
   }
   // 更多测试
   for (int i = 0; i < num_random_tests_32; ++i) {
-      FMA_Operands ops = {gen_random_fp32(-126, 20), gen_random_fp32(-126, 20), gen_random_fp32(-126, 20)};
+      FMA_Operands_Hex ops = {gen_random_fp32(-126, 20), gen_random_fp32(-126, 20), gen_random_fp32(-126, 20)};
       tests.push_back(TestCase(ops, ErrorType::RelativeError));
   }
   for (int i = 0; i < num_random_tests_32; ++i) {
-      FMA_Operands ops = {gen_random_fp32(-126, 20), gen_random_fp32(-127, -126), gen_random_fp32(-126, 20)};
+      FMA_Operands_Hex ops = {gen_random_fp32(-126, 20), gen_random_fp32(-127, -126), gen_random_fp32(-126, 20)};
       tests.push_back(TestCase(ops, ErrorType::RelativeError));
   }
   for (int i = 0; i < num_random_tests_32; ++i) {
-      FMA_Operands ops = {gen_random_fp32(-127, -126), gen_random_fp32(-126, 20), gen_random_fp32(-126, 20)};
+      FMA_Operands_Hex ops = {gen_random_fp32(-127, -126), gen_random_fp32(-126, 20), gen_random_fp32(-126, 20)};
       tests.push_back(TestCase(ops, ErrorType::RelativeError));
   }
   for (int i = 0; i < num_random_tests_32; ++i) {
-      FMA_Operands ops = {gen_random_fp32(-126, 20), gen_random_fp32(-126, 20), gen_random_fp32(-127, -126)};
+      FMA_Operands_Hex ops = {gen_random_fp32(-126, 20), gen_random_fp32(-126, 20), gen_random_fp32(-127, -126)};
       tests.push_back(TestCase(ops, ErrorType::RelativeError));
   }
-  for (int i = 0; i < num_random_tests_32; ++i) {
-      FMA_Operands ops = {gen_random_fp32(-126, 20), gen_random_fp32(-127, -126), gen_random_fp32(-127, -126)};
-      tests.push_back(TestCase(ops, ErrorType::RelativeError));
-  }
-  for (int i = 0; i < num_random_tests_32; ++i) {
-      FMA_Operands ops = {gen_random_fp32(-127, -126), gen_random_fp32(-127, -126), gen_random_fp32(-127, -126)};
-      tests.push_back(TestCase(ops, ErrorType::RelativeError));
-  }
-  for (int i = 0; i < num_random_tests_32; ++i) {
-      FMA_Operands ops = {gen_random_fp32(-127, 10), gen_random_fp32(-127, 10), gen_random_fp32(-127, 10)};
-      tests.push_back(TestCase(ops, ErrorType::RelativeError));
-  }
+      for (int i = 0; i < num_random_tests_32; ++i) {
+        FMA_Operands_Hex ops = {gen_random_fp32(-126, 20), gen_random_fp32(-127, -126), gen_random_fp32(-127, -126)};
+        tests.push_back(TestCase(ops, ErrorType::RelativeError));
+    }
+    for (int i = 0; i < num_random_tests_32; ++i) {
+        FMA_Operands_Hex ops = {gen_random_fp32(-127, -126), gen_random_fp32(-127, -126), gen_random_fp32(-127, -126)};
+        tests.push_back(TestCase(ops, ErrorType::RelativeError));
+    }
+    for (int i = 0; i < num_random_tests_32; ++i) {
+        FMA_Operands_Hex ops = {gen_random_fp32(-127, 10), gen_random_fp32(-127, 10), gen_random_fp32(-127, 10)};
+        tests.push_back(TestCase(ops, ErrorType::RelativeError));
+    }
   }
 
 
@@ -217,25 +228,15 @@ int main(int argc, char *argv[]) {
   tests.push_back(TestCase(FMA_Operands_Hex_16{0x668, 0x5b00, 0xa59b}, FMA_Operands_Hex_16{0x8f63, 0x575, 0xb918}, ErrorType::RelativeError));
   // tests.push_back(TestCase(FMA_Operands_Hex_16{0xe42b, 0xdbaa, 0xdeb6}, FMA_Operands_Hex_16{0x5be8, 0xdc0c, 0x6aa3}, ErrorType::RelativeError));
 
-    printf("\n---- Random tests for FP16 ----\n");
-    int num_random_tests_16 = 200;
-    // ---- FP16 任意值随机测试 ----
-    auto gen_any_fp16 = []() -> uint16_t {
-        uint16_t val;
-        // 生成完全随机的16位数值
-        do {
-            val = (uint16_t)rand();
-        } while ((val & 0x7C00) == 0x7C00 && (val & 0x03FF) != 0); // 避免NaN值
-        return val;
-    };
-
-    for (int i = 0; i < num_random_tests_16; ++i) {
-        // 生成两组FP16随机操作数
-        FMA_Operands_Hex_16 ops1 = {gen_any_fp16(), gen_any_fp16(), gen_any_fp16()};
-        FMA_Operands_Hex_16 ops2 = {gen_any_fp16(), gen_any_fp16(), gen_any_fp16()};
-        tests.push_back(TestCase(ops1, ops2, ErrorType::ULP));
-    }
-    //---------------------------------------------------------------
+  printf("\n---- Random tests for FP16 ----\n");
+  int num_random_tests_16 = 200;
+  // ---- FP16 任意值随机测试 ----
+  for (int i = 0; i < num_random_tests_16; ++i) {
+      // 生成两组FP16随机操作数
+      FMA_Operands_Hex_16 ops1 = {gen_any_fp16(), gen_any_fp16(), gen_any_fp16()};
+      FMA_Operands_Hex_16 ops2 = {gen_any_fp16(), gen_any_fp16(), gen_any_fp16()};
+      tests.push_back(TestCase(ops1, ops2, ErrorType::ULP));
+  }
   // ---- 进行不同指数范围的FP16随机测试 ----
   // 小数范围测试：指数[-15, -5]
   for (int i = 0; i < num_random_tests_16; ++i) {
@@ -330,14 +331,6 @@ int main(int argc, char *argv[]) {
     int num_random_tests_bf16 = 200;
     
     // ---- BF16 任意值随机测试 ----
-    auto gen_any_bf16 = []() -> uint16_t {
-        uint16_t val;
-        // 生成完全随机的16位数值
-        do {
-            val = (uint16_t)rand();
-        } while ((val & 0x7F80) == 0x7F80 && (val & 0x007F) != 0); // 避免NaN值
-        return val;
-    };
     for (int i = 0; i < num_random_tests_bf16; ++i) {
         // 生成两组BF16随机操作数
         FMA_Operands_Hex_BF16 ops1 = {gen_any_bf16(), gen_any_bf16(), gen_any_bf16()};
@@ -416,21 +409,74 @@ int main(int argc, char *argv[]) {
   tests.push_back(TestCase(FMA_Operands_FP16_Widen{0xbc00, 0x4000, 0x40000000}, ErrorType::Precise)); // -1.0 * 2.0 + 2.0 = 0.0
   tests.push_back(TestCase(FMA_Operands_FP16_Widen{0x3c00, 0xbc00, 0x40400000}, ErrorType::Precise)); // 1.0 * -1.0 + 3.0 = 2.0
   tests.push_back(TestCase(FMA_Operands_FP16_Widen{0x0000, 0x4000, 0x40000000}, ErrorType::Precise)); // 0.0 * 2.0 + 2.0 = 2.0
-  tests.push_back(TestCase(FMA_Operands_FP16_Widen{0x3c00, 0x0000, 0x40000000}, ErrorType::Precise)); // 1.0 * 0.0 + 2.0 = 2.0
-  tests.push_back(TestCase(FMA_Operands_FP16_Widen{0x3c00, 0x4000, 0x00000000}, ErrorType::Precise)); // 1.0 * 2.0 + 0.0 = 2.0
-  tests.push_back(TestCase(FMA_Operands_FP16_Widen{0x4200, 0x3800, 0x3f800000}, ErrorType::Precise)); // 3.0 * 0.5 + 1.0 = 2.5
-  tests.push_back(TestCase(FMA_Operands_FP16_Widen{0x4000, 0x4000, 0xc0000000}, ErrorType::Precise)); // 2.0 * 2.0 + (-2.0) = 2.0
-
-  printf("\n---- Random tests for FP16 Widen ----\n");
-  int num_random_tests_fp16_widen = 1;
   
-      // 正常范围测试
+  printf("\n---- Random tests for FP16 Widen ----\n");
+  int num_random_tests_fp16_widen = 1000;
+  // ---- FP16 widen 任意值随机测试 ----
+    for (int i = 0; i < 10000; ++i) {
+        FMA_Operands_FP16_Widen ops = {gen_any_fp16(), gen_any_fp16(), gen_any_fp32()};
+        tests.push_back(TestCase(ops, ErrorType::ULP));
+    }
+    // 正常范围测试
     for (int i = 0; i < num_random_tests_fp16_widen; ++i) {
-        FMA_Operands_FP16_Widen ops = {gen_random_fp16(-15, 15), gen_random_fp16(-15, 15), gen_random_fp32(-20, 20)};
-        
-        printf("FP16 Widen Random Test #%d: a=0x%04x, b=0x%04x, c=0x%08x\n", 
-               i+1, ops.a_hex, ops.b_hex, ops.c_hex);
-         
+        FMA_Operands_FP16_Widen ops = {gen_random_fp16(-10, 10), gen_random_fp16(-10, 10), gen_random_fp32(-20, 20)};
+        tests.push_back(TestCase(ops, ErrorType::ULP));
+    }
+    // 小数范围测试 - FP16指数范围
+    for (int i = 0; i < num_random_tests_fp16_widen; ++i) {
+        FMA_Operands_FP16_Widen ops = {gen_random_fp16(-15, -5), gen_random_fp16(-15, -5), gen_random_fp32(-50, -10)};
+        tests.push_back(TestCase(ops, ErrorType::ULP));
+    }
+    // 大数范围测试 - FP16指数范围  
+    for (int i = 0; i < num_random_tests_fp16_widen; ++i) {
+        FMA_Operands_FP16_Widen ops = {gen_random_fp16(5, 15), gen_random_fp16(5, 15), gen_random_fp32(10, 50)};
+        tests.push_back(TestCase(ops, ErrorType::ULP));
+    }
+    // 混合指数范围测试
+    for (int i = 0; i < num_random_tests_fp16_widen; ++i) {
+        FMA_Operands_FP16_Widen ops = {gen_random_fp16(-15, 15), gen_random_fp16(-15, 15), gen_random_fp32(-126, 127)};
+        tests.push_back(TestCase(ops, ErrorType::ULP));
+    }
+    // 非规格化数边界测试 - FP16
+    for (int i = 0; i < num_random_tests_fp16_widen; ++i) {
+        FMA_Operands_FP16_Widen ops = {gen_random_fp16(-15, -14), gen_random_fp16(-15, 15), gen_random_fp32(-20, 20)};
+        tests.push_back(TestCase(ops, ErrorType::ULP));
+    }
+    for (int i = 0; i < num_random_tests_fp16_widen; ++i) {
+        FMA_Operands_FP16_Widen ops = {gen_random_fp16(-15, 15), gen_random_fp16(-15, -14), gen_random_fp32(-20, 20)};
+        tests.push_back(TestCase(ops, ErrorType::ULP));
+    }
+    // 极端范围测试 - 接近FP16溢出
+    for (int i = 0; i < num_random_tests_fp16_widen; ++i) {
+        FMA_Operands_FP16_Widen ops = {gen_random_fp16(14, 15), gen_random_fp16(14, 15), gen_random_fp32(50, 100)};
+        tests.push_back(TestCase(ops, ErrorType::ULP));
+    }
+    // 极端下溢测试 - 接近FP16下溢
+    for (int i = 0; i < num_random_tests_fp16_widen; ++i) {
+        FMA_Operands_FP16_Widen ops = {gen_random_fp16(-15, -14), gen_random_fp16(-15, -14), gen_random_fp32(-100, -50)};
+        tests.push_back(TestCase(ops, ErrorType::ULP));
+    }
+    // 高精度FP32 c值测试
+    for (int i = 0; i < num_random_tests_fp16_widen; ++i) {
+        FMA_Operands_FP16_Widen ops = {gen_random_fp16(-5, 5), gen_random_fp16(-5, 5), gen_random_fp32(-126, -100)};
+        tests.push_back(TestCase(ops, ErrorType::ULP));
+    }
+    for (int i = 0; i < num_random_tests_fp16_widen; ++i) {
+        FMA_Operands_FP16_Widen ops = {gen_random_fp16(-5, 5), gen_random_fp16(-5, 5), gen_random_fp32(100, 126)};
+        tests.push_back(TestCase(ops, ErrorType::ULP));
+    }
+    // 全范围随机测试 - 最全面的测试
+    for (int i = 0; i < num_random_tests_fp16_widen; ++i) {
+        FMA_Operands_FP16_Widen ops = {gen_random_fp16(-15, 15), gen_random_fp16(-15, 15), gen_random_fp32(-126, 127)};
+        tests.push_back(TestCase(ops, ErrorType::ULP));
+    }
+    // 特殊组合测试 - 一个操作数极大，另一个极小
+    for (int i = 0; i < num_random_tests_fp16_widen; ++i) {
+        FMA_Operands_FP16_Widen ops = {gen_random_fp16(10, 15), gen_random_fp16(-15, -10), gen_random_fp32(-20, 20)};
+        tests.push_back(TestCase(ops, ErrorType::ULP));
+    }
+    for (int i = 0; i < num_random_tests_fp16_widen; ++i) {
+        FMA_Operands_FP16_Widen ops = {gen_random_fp16(-15, -10), gen_random_fp16(10, 15), gen_random_fp32(-20, 20)};
         tests.push_back(TestCase(ops, ErrorType::ULP));
     }
   }

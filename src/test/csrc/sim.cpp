@@ -18,22 +18,6 @@ using namespace std;
 // ===================================================================
 // TestCase 实现
 // ===================================================================
-
-// FP32 single operation constructor
-TestCase::TestCase(const FMA_Operands& ops, ErrorType error_type) 
-    : mode(TestMode::FP32), 
-      error_type(error_type),
-      op_fp(ops),
-      is_fp32(true), is_fp16(false), is_bf16(false), is_widen(false)
-{
-    memcpy(&a_fp32_bits, &op_fp.a, sizeof(uint32_t));
-    memcpy(&b_fp32_bits, &op_fp.b, sizeof(uint32_t));
-    memcpy(&c_fp32_bits, &op_fp.c, sizeof(uint32_t));
-
-    float expected_fp = op_fp.a * op_fp.b + op_fp.c;
-    memcpy(&expected_res_fp32, &expected_fp, sizeof(uint32_t));
-}
-
 // FP32 single operation constructor using hexadecimal input
 TestCase::TestCase(const FMA_Operands_Hex& ops_hex, ErrorType error_type) 
     : mode(TestMode::FP32), 

@@ -65,14 +65,8 @@ struct DutOutputs {
 // ===================================================================
 class TestCase {
 public:
-    // 构造函数 for FP32 single operation, now using the struct
-    TestCase(const FMA_Operands& ops, ErrorType error_type = ErrorType::ULP);
-
     // 构造函数 for FP32 single operation using hexadecimal input
     TestCase(const FMA_Operands_Hex& ops_hex, ErrorType error_type = ErrorType::ULP);
-
-    // 构造函数 for FP16 dual operation, using the struct
-    TestCase(const FMA_Operands& op1, const FMA_Operands& op2, ErrorType error_type = ErrorType::ULP);
     
     // 构造函数 for FP16 dual operation using hexadecimal input
     TestCase(const FMA_Operands_Hex_16& op1, const FMA_Operands_Hex_16& op2, ErrorType error_type = ErrorType::ULP);
