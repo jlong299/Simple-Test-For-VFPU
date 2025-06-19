@@ -19,12 +19,22 @@ struct FMA_Operands_Hex_16 {
 struct FMA_Operands_Hex_BF16 {
     uint16_t a_hex, b_hex, c_hex;
 };
+struct FMA_Operands_FP16_Widen {
+    uint16_t a_hex, b_hex;
+    uint32_t c_hex;
+};
+struct FMA_Operands_BF16_Widen {
+    uint16_t a_hex, b_hex;
+    uint32_t c_hex;
+};
 
 // 定义测试模式的枚举类型
 enum class TestMode {
     FP32,
     FP16,
-    BF16
+    BF16,
+    FP16_Widen,
+    BF16_Widen
 };
 
 // 定义测试结果允许误差范围
@@ -69,6 +79,9 @@ public:
     
     // 构造函数 for BF16 dual operation using hexadecimal input
     TestCase(const FMA_Operands_Hex_BF16& op1, const FMA_Operands_Hex_BF16& op2, ErrorType error_type = ErrorType::ULP);
+    
+    // 构造函数 for FP16 widen operation using hexadecimal input (a,b are FP16, c is FP32, result is FP32)
+    TestCase(const FMA_Operands_FP16_Widen& ops_widen, ErrorType error_type = ErrorType::ULP);
     
     void print_details() const;
     bool check_result(const DutOutputs& dut_res) const;

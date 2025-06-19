@@ -126,7 +126,7 @@ class FMA_16_32 extends Module {
                                  exp_adjsubn_sum_high - Mux(is_fp16, 15.U, 127.U))
   val exp_res_adjsubn_low = exp_adjsubn_sum_low - Mux(is_fp16, 15.U, 127.U)
 
-  val res_is_inf_high = Mux(is_fp16, 
+  val res_is_inf_high = Mux(is_fp16 && !widen, 
           !exp_res_adjsubn_high(9) && (exp_res_adjsubn_high(8, 5) === "b0001".U || exp_res_adjsubn_high(4, 0) === "b11111".U),
           !exp_res_adjsubn_high(9) && (exp_res_adjsubn_high(8) || exp_res_adjsubn_high(7, 0) === "b1111_1111".U))
   val res_is_inf_low = Mux(is_fp16, 

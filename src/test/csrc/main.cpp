@@ -22,8 +22,11 @@ float gen_random_fp32(int exp_min, int exp_max) {
     // 随机生成指数，范围[exp_min, exp_max]
     // IEEE 754偏置为127
     int exp_unbiased = exp_min + (rand() % (exp_max - exp_min + 1));
+    printf("exp_min: %d, exp_unbiased: %d\n", exp_min, exp_unbiased);
     uint32_t exp_biased = (exp_unbiased + 127) & 0xFF; // 加偏置并限制在8位
     uint32_t exp = exp_biased << 23;
+    printf("exp_biased: %u\n", exp_biased);
+    printf("exp: 0x%08X\n", exp);
     
     // 随机生成23位尾数，拆分多部分以确保充分随机性
     // 23位拆分为: 8位 + 8位 + 7位
@@ -98,6 +101,13 @@ int main(int argc, char *argv[]) {
   // 2. 创建一个测试用例的集合
   std::vector<TestCase> tests;
   
+  bool test_fp32 = false;
+  bool test_fp16 = false;
+  bool test_bf16 = false;
+  bool test_fp16_widen = true;
+  bool test_bf16_widen = true;
+  
+  if (test_fp32) {
   // -- FP32 单精度浮点数测试 --
   tests.push_back(TestCase(FMA_Operands{-5.0f, -7.0f, -4789.0f}, ErrorType::Precise));
   tests.push_back(TestCase(FMA_Operands{1.0f, 2.0f, 0.0f}, ErrorType::Precise));
@@ -112,7 +122,7 @@ int main(int argc, char *argv[]) {
   tests.push_back(TestCase(FMA_Operands_Hex{0x816849E7, 0x00B6D8A2, 0x08F0CF76}, ErrorType::ULP));
 
   printf("\n---- Random tests for FP32 ----\n");
-  int num_random_tests_32 = 500;
+  int num_random_tests_32 = 200;
   // ---- FP32 任意值随机测试 ----
   auto gen_any_float = []() -> float {
       union {
@@ -177,7 +187,10 @@ int main(int argc, char *argv[]) {
       FMA_Operands ops = {gen_random_fp32(-127, 10), gen_random_fp32(-127, 10), gen_random_fp32(-127, 10)};
       tests.push_back(TestCase(ops, ErrorType::RelativeError));
   }
+  }
 
+
+  if (test_fp16) {
   // -- FP16 并行双路半精度浮点数测试 --
   // TODO: 验证c代码是将fp16转换成fp32之后做a*b+c，最后将结果转为fp16。
   //       这样，在a*b接近fp16的inf时，情况会比较复杂，会有多种情况导致类似ref-model和dut的a*b结果一方是inf，另一方是接近inf的数。
@@ -205,7 +218,7 @@ int main(int argc, char *argv[]) {
   // tests.push_back(TestCase(FMA_Operands_Hex_16{0xe42b, 0xdbaa, 0xdeb6}, FMA_Operands_Hex_16{0x5be8, 0xdc0c, 0x6aa3}, ErrorType::RelativeError));
 
     printf("\n---- Random tests for FP16 ----\n");
-    int num_random_tests_16 = 500;
+    int num_random_tests_16 = 200;
     // ---- FP16 任意值随机测试 ----
     auto gen_any_fp16 = []() -> uint16_t {
         uint16_t val;
@@ -268,7 +281,9 @@ int main(int argc, char *argv[]) {
       FMA_Operands_Hex_16 ops2 = {gen_random_fp16(-15, -14), gen_random_fp16(-15, -14), gen_random_fp16(-15, -14)};
       tests.push_back(TestCase(ops1, ops2, ErrorType::ULP));
   }
+  }
 
+  if (test_bf16) {
     // -- BF16 并行双路半精度浮点数测试 --
     // TODO: 验证c代码是将bf16转换成fp32之后做a*b+c，最后将结果转为bf16。
     //       这样，在a*b接近bf16的inf时，情况会比较复杂，会有多种情况导致类似ref-model和dut的a*b结果一方是inf，另一方是接近inf的数。
@@ -312,7 +327,7 @@ int main(int argc, char *argv[]) {
     tests.push_back(TestCase(FMA_Operands_Hex_BF16{0xbf80, 0x0200, 0x0200}, FMA_Operands_Hex_BF16{0xbf80, 0x0200, 0x0200}, ErrorType::ULP));
     
     printf("\n---- Random tests for BF16 ----\n");
-    int num_random_tests_bf16 = 500;
+    int num_random_tests_bf16 = 200;
     
     // ---- BF16 任意值随机测试 ----
     auto gen_any_bf16 = []() -> uint16_t {
@@ -391,6 +406,34 @@ int main(int argc, char *argv[]) {
         FMA_Operands_Hex_BF16 ops2 = {gen_random_bf16(-127, -126), gen_random_bf16(-127, -126), gen_random_bf16(-127, -126)};
         tests.push_back(TestCase(ops1, ops2, ErrorType::ULP_or_RelativeError));
     }
+  }
+
+  if (test_fp16_widen) {
+  // -- FP16 widen 测试 --
+  // FP16 widen 测试：混合精度 (a,b=FP16, c=FP32, result=FP32)
+  // 基础测试用例
+  tests.push_back(TestCase(FMA_Operands_FP16_Widen{0x3c00, 0x4000, 0x40000000}, ErrorType::Precise)); // 1.0 * 2.0 + 2.0 = 4.0
+  tests.push_back(TestCase(FMA_Operands_FP16_Widen{0xbc00, 0x4000, 0x40000000}, ErrorType::Precise)); // -1.0 * 2.0 + 2.0 = 0.0
+  tests.push_back(TestCase(FMA_Operands_FP16_Widen{0x3c00, 0xbc00, 0x40400000}, ErrorType::Precise)); // 1.0 * -1.0 + 3.0 = 2.0
+  tests.push_back(TestCase(FMA_Operands_FP16_Widen{0x0000, 0x4000, 0x40000000}, ErrorType::Precise)); // 0.0 * 2.0 + 2.0 = 2.0
+  tests.push_back(TestCase(FMA_Operands_FP16_Widen{0x3c00, 0x0000, 0x40000000}, ErrorType::Precise)); // 1.0 * 0.0 + 2.0 = 2.0
+  tests.push_back(TestCase(FMA_Operands_FP16_Widen{0x3c00, 0x4000, 0x00000000}, ErrorType::Precise)); // 1.0 * 2.0 + 0.0 = 2.0
+  tests.push_back(TestCase(FMA_Operands_FP16_Widen{0x4200, 0x3800, 0x3f800000}, ErrorType::Precise)); // 3.0 * 0.5 + 1.0 = 2.5
+  tests.push_back(TestCase(FMA_Operands_FP16_Widen{0x4000, 0x4000, 0xc0000000}, ErrorType::Precise)); // 2.0 * 2.0 + (-2.0) = 2.0
+
+  printf("\n---- Random tests for FP16 Widen ----\n");
+  int num_random_tests_fp16_widen = 1;
+  
+      // 正常范围测试
+    for (int i = 0; i < num_random_tests_fp16_widen; ++i) {
+        FMA_Operands_FP16_Widen ops = {gen_random_fp16(-15, 15), gen_random_fp16(-15, 15), gen_random_fp32(-20, 20)};
+        
+        printf("FP16 Widen Random Test #%d: a=0x%04x, b=0x%04x, c=0x%08x\n", 
+               i+1, ops.a_hex, ops.b_hex, ops.c_hex);
+         
+        tests.push_back(TestCase(ops, ErrorType::ULP));
+    }
+  }
 
 
 

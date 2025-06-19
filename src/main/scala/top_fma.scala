@@ -39,7 +39,7 @@ class top extends Module{
   }.otherwise {
     fma.io.a_in := Cat(io.a_in_16(1), io.a_in_16(0))
     fma.io.b_in := Cat(io.b_in_16(1), io.b_in_16(0))
-    fma.io.c_in := Cat(io.c_in_16(1), io.c_in_16(0))
+    fma.io.c_in := Mux(!io.is_widen, Cat(io.c_in_16(1), io.c_in_16(0)), io.c_in_32)
   }
 
   io.res_out_32 := fma.io.res_out

@@ -187,6 +187,32 @@ TestCase::TestCase(const FMA_Operands_Hex_BF16& op1, const FMA_Operands_Hex_BF16
     expected_res2_bf16 = fp32_to_bf16(expected_fp2);
 }
 
+// FP16 widen operation constructor
+TestCase::TestCase(const FMA_Operands_FP16_Widen& ops_widen, ErrorType error_type)
+    : mode(TestMode::FP16_Widen),
+      error_type(error_type),
+      is_fp32(false), is_fp16(true), is_bf16(false), is_widen(true)
+{
+    // 存储输入数据的位表示
+    a_fp32_bits = ((uint32_t)ops_widen.a_hex) << 16;  // FP16 a扩展到FP32格式 (左移16位)
+    b_fp32_bits = ((uint32_t)ops_widen.b_hex) << 16;  // FP16 b扩展到FP32格式 (左移16位)
+    c_fp32_bits = ops_widen.c_hex;                     // FP32 c直接使用
+    
+    // 转换为浮点数用于计算
+    op_fp.a = fp16_to_fp32(ops_widen.a_hex);
+    op_fp.b = fp16_to_fp32(ops_widen.b_hex);
+    memcpy(&op_fp.c, &ops_widen.c_hex, sizeof(float));
+    
+    // 计算期望结果 (FP32精度)
+    float mult_result = op_fp.a * op_fp.b;
+    float expected_fp = mult_result + op_fp.c;
+    
+    // 转换期望结果为位表示
+    memcpy(&expected_res_fp32, &expected_fp, sizeof(uint32_t));
+}
+
+
+
 
 void TestCase::print_details() const {
     printf("--- Test Case ---\n");
@@ -226,6 +252,16 @@ void TestCase::print_details() const {
                    op2_fp.c, c2_bf16_bits);
             printf("Expected1: %.8f (HEX: 0x%x)\n", bf16_to_fp32(expected_res1_bf16), expected_res1_bf16);
             printf("Expected2: %.8f (HEX: 0x%x)\n", bf16_to_fp32(expected_res2_bf16), expected_res2_bf16);
+            break;
+        case TestMode::FP16_Widen:
+            printf("Mode: FP16 Widen (a,b=FP16, c=FP32, result=FP32)\n");
+            printf("Inputs: a=%.8f (FP16: 0x%04x), b=%.8f (FP16: 0x%04x), c=%.8f (FP32: 0x%08x)\n", 
+                   op_fp.a, (uint16_t)(a_fp32_bits >> 16),
+                   op_fp.b, (uint16_t)(b_fp32_bits >> 16),
+                   op_fp.c, c_fp32_bits);
+            float expected_fp_widen;
+            memcpy(&expected_fp_widen, &expected_res_fp32, sizeof(float));
+            printf("Expected: %.8f (HEX: 0x%08X)\n", expected_fp_widen, expected_res_fp32);
             break;
     }
 }
@@ -466,6 +502,59 @@ bool TestCase::check_result(const DutOutputs& dut_res) const {
             pass = pass1 && pass2;
             break;
         }
+        case TestMode::FP16_Widen: {
+            // FP16 Widen模式：输出是FP32
+            float dut_res_fp;
+            memcpy(&dut_res_fp, &dut_res.res_out_32, sizeof(float));
+            printf("DUT Result: %.8f (HEX: 0x%08X)\n", dut_res_fp, dut_res.res_out_32);
+            float expected_fp;
+            memcpy(&expected_fp, &expected_res_fp32, sizeof(float));
+            int64_t ulp_diff = 0;
+            float relative_error = 0;
+
+            bool precise_pass = (dut_res.res_out_32 == expected_res_fp32);
+            
+            // 如果两个数都是0（忽略符号位），认为通过
+            bool both_zero = both_fp32_zero(dut_res.res_out_32, expected_res_fp32);
+            
+            if (error_type == ErrorType::Precise) {
+                pass = precise_pass || both_zero;
+            }
+            if (error_type == ErrorType::ULP) {
+                // 允许8 ulp (unit in the last place) 的误差
+                ulp_diff = std::abs((int64_t)dut_res.res_out_32 - (int64_t)expected_res_fp32);
+                pass = (ulp_diff <= 8) || both_zero;
+            }
+            if (error_type == ErrorType::RelativeError) {
+                float max_abs = std::max(std::abs(op_fp.a * op_fp.b), std::abs(op_fp.c));
+                relative_error = std::abs(dut_res_fp - expected_fp) / max_abs;
+                pass = ((max_abs < std::pow(2, -60)) 
+                       ? (relative_error < 1e-3) //若ab或c的绝对值太小，则放宽误差要求
+                       : (relative_error < 1e-5)) 
+                       || precise_pass || both_zero;
+            }
+            if (!pass) {
+                if (error_type == ErrorType::Precise) {
+                    printf("ERROR: Expected 0x%08X, Got 0x%08X (Exact match required)\n", 
+                           expected_res_fp32, dut_res.res_out_32);
+                }
+                if (error_type == ErrorType::ULP) {
+                    printf("ERROR: Expected 0x%08X, Got 0x%08X, ULP diff: %ld\n", 
+                           expected_res_fp32, dut_res.res_out_32, ulp_diff);
+                }
+                if (error_type == ErrorType::RelativeError) {
+                    printf("ERROR: Expected 0x%08X, Got 0x%08X, Relative Error: %f\n", 
+                           expected_res_fp32, dut_res.res_out_32, relative_error);
+                }
+            }
+            if (error_type == ErrorType::ULP) {
+                printf("ULP diff: %ld\n", ulp_diff);
+            }
+            if (error_type == ErrorType::RelativeError) {
+                printf("Relative diff ratio: %.8e\n", relative_error);
+            }
+            break;
+        }
     }
 
     if (pass) {
@@ -560,6 +649,14 @@ bool Simulator::run_test(const TestCase& test) {
             top_->io_a_in_16_1 = test.a2_bf16_bits;
             top_->io_b_in_16_1 = test.b2_bf16_bits;
             top_->io_c_in_16_1 = test.c2_bf16_bits;
+            break;
+        case TestMode::FP16_Widen:
+            // FP16 Widen: a,b是FP16（通过32位端口，高16位为FP16），c是FP32
+            top_->io_a_in_16_0 = test.a_fp32_bits & 0xFFFF;          // 低16位
+            top_->io_a_in_16_1 = (test.a_fp32_bits >> 16) & 0xFFFF;  // 高16位
+            top_->io_b_in_16_0 = test.b_fp32_bits & 0xFFFF;          // 低16位
+            top_->io_b_in_16_1 = (test.b_fp32_bits >> 16) & 0xFFFF;  // 高16位
+            top_->io_c_in_32 = test.c_fp32_bits;
             break;
     }
     
