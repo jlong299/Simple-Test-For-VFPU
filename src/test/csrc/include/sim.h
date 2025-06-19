@@ -77,6 +77,9 @@ public:
     // 构造函数 for FP16 widen operation using hexadecimal input (a,b are FP16, c is FP32, result is FP32)
     TestCase(const FMA_Operands_FP16_Widen& ops_widen, ErrorType error_type = ErrorType::ULP);
     
+    // 构造函数 for BF16 widen operation using hexadecimal input (a,b are BF16, c is FP32, result is FP32)
+    TestCase(const FMA_Operands_BF16_Widen& ops_widen, ErrorType error_type = ErrorType::ULP);
+    
     void print_details() const;
     bool check_result(const DutOutputs& dut_res) const;
 

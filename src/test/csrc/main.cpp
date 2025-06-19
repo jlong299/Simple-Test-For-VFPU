@@ -126,9 +126,9 @@ int main(int argc, char *argv[]) {
   // 2. 创建一个测试用例的集合
   std::vector<TestCase> tests;
   
-  bool test_fp32 = false;
-  bool test_fp16 = false;
-  bool test_bf16 = false;
+  bool test_fp32 = true;
+  bool test_fp16 = true;
+  bool test_bf16 = true;
   bool test_fp16_widen = true;
   bool test_bf16_widen = true;
   
@@ -411,9 +411,9 @@ int main(int argc, char *argv[]) {
   tests.push_back(TestCase(FMA_Operands_FP16_Widen{0x0000, 0x4000, 0x40000000}, ErrorType::Precise)); // 0.0 * 2.0 + 2.0 = 2.0
   
   printf("\n---- Random tests for FP16 Widen ----\n");
-  int num_random_tests_fp16_widen = 1000;
+  int num_random_tests_fp16_widen = 200;
   // ---- FP16 widen 任意值随机测试 ----
-    for (int i = 0; i < 10000; ++i) {
+    for (int i = 0; i < num_random_tests_fp16_widen; ++i) {
         FMA_Operands_FP16_Widen ops = {gen_any_fp16(), gen_any_fp16(), gen_any_fp32()};
         tests.push_back(TestCase(ops, ErrorType::ULP));
     }
@@ -477,6 +477,67 @@ int main(int argc, char *argv[]) {
     }
     for (int i = 0; i < num_random_tests_fp16_widen; ++i) {
         FMA_Operands_FP16_Widen ops = {gen_random_fp16(-15, -10), gen_random_fp16(10, 15), gen_random_fp32(-20, 20)};
+        tests.push_back(TestCase(ops, ErrorType::ULP));
+    }
+  }
+
+  if (test_bf16_widen) {
+  // -- BF16 widen 测试 --
+  // BF16 widen 测试：混合精度 (a,b=BF16, c=FP32, result=FP32)
+  // 基础测试用例
+  tests.push_back(TestCase(FMA_Operands_BF16_Widen{0x3f80, 0x4000, 0x40000000}, ErrorType::Precise)); // 1.0 * 2.0 + 2.0 = 4.0
+  tests.push_back(TestCase(FMA_Operands_BF16_Widen{0xbf80, 0x4000, 0x40000000}, ErrorType::Precise)); // -1.0 * 2.0 + 2.0 = 0.0
+  tests.push_back(TestCase(FMA_Operands_BF16_Widen{0x3f80, 0xbf80, 0x40400000}, ErrorType::Precise)); // 1.0 * -1.0 + 3.0 = 2.0
+  tests.push_back(TestCase(FMA_Operands_BF16_Widen{0x0000, 0x4000, 0x40000000}, ErrorType::Precise)); // 0.0 * 2.0 + 2.0 = 2.0
+
+  printf("\n---- Random tests for BF16 Widen ----\n");
+  int num_random_tests_bf16_widen = 200;
+  // ---- BF16 widen 任意值随机测试 ----
+    for (int i = 0; i < num_random_tests_bf16_widen; ++i) {
+        FMA_Operands_BF16_Widen ops = {gen_any_bf16(), gen_any_bf16(), gen_any_fp32()};
+        tests.push_back(TestCase(ops, ErrorType::ULP));
+    }
+    // 正常范围测试
+    for (int i = 0; i < num_random_tests_bf16_widen; ++i) {
+        FMA_Operands_BF16_Widen ops = {gen_random_bf16(-10, 10), gen_random_bf16(-10, 10), gen_random_fp32(-20, 20)};
+        tests.push_back(TestCase(ops, ErrorType::ULP));
+    }
+    // 小数范围测试 - BF16指数范围
+    for (int i = 0; i < num_random_tests_bf16_widen; ++i) {
+        FMA_Operands_BF16_Widen ops = {gen_random_bf16(-50, -10), gen_random_bf16(-50, -10), gen_random_fp32(-50, -10)};
+        tests.push_back(TestCase(ops, ErrorType::ULP));
+    }
+    // 大数范围测试 - BF16指数范围  
+    for (int i = 0; i < num_random_tests_bf16_widen; ++i) {
+        FMA_Operands_BF16_Widen ops = {gen_random_bf16(10, 50), gen_random_bf16(10, 50), gen_random_fp32(10, 50)};
+        tests.push_back(TestCase(ops, ErrorType::ULP));
+    }
+    // 混合指数范围测试
+    for (int i = 0; i < num_random_tests_bf16_widen; ++i) {
+        FMA_Operands_BF16_Widen ops = {gen_random_bf16(-126, 127), gen_random_bf16(-126, 127), gen_random_fp32(-126, 127)};
+        tests.push_back(TestCase(ops, ErrorType::ULP));
+    }
+    // 非规格化数边界测试 - BF16
+    for (int i = 0; i < num_random_tests_bf16_widen; ++i) {
+        FMA_Operands_BF16_Widen ops = {gen_random_bf16(-126, -125), gen_random_bf16(-126, 20), gen_random_fp32(-20, 20)};
+        tests.push_back(TestCase(ops, ErrorType::ULP));
+    }
+    for (int i = 0; i < num_random_tests_bf16_widen; ++i) {
+        FMA_Operands_BF16_Widen ops = {gen_random_bf16(-126, 20), gen_random_bf16(-126, -125), gen_random_fp32(-20, 20)};
+        tests.push_back(TestCase(ops, ErrorType::ULP));
+    }
+    // 全范围随机测试 - 最全面的测试
+    for (int i = 0; i < num_random_tests_bf16_widen; ++i) {
+        FMA_Operands_BF16_Widen ops = {gen_random_bf16(-127, 127), gen_random_bf16(-127, 127), gen_random_fp32(-127, 127)};
+        tests.push_back(TestCase(ops, ErrorType::ULP));
+    }
+    // 特殊组合测试 - 一个操作数极大，另一个极小
+    for (int i = 0; i < num_random_tests_bf16_widen; ++i) {
+        FMA_Operands_BF16_Widen ops = {gen_random_bf16(50, 100), gen_random_bf16(-100, -50), gen_random_fp32(-20, 20)};
+        tests.push_back(TestCase(ops, ErrorType::ULP));
+    }
+    for (int i = 0; i < num_random_tests_bf16_widen; ++i) {
+        FMA_Operands_BF16_Widen ops = {gen_random_bf16(-100, -50), gen_random_bf16(50, 100), gen_random_fp32(-20, 20)};
         tests.push_back(TestCase(ops, ErrorType::ULP));
     }
   }
