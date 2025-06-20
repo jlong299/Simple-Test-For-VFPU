@@ -101,7 +101,7 @@ class FMA_16_32 extends Module {
     * Here we need a integer multiplier to perform:
     *   Two 12*12 UInt multiplications, OR one 24*24 UInt multiplication
     */
-  val intMul_12_24 = Module(new IntMUL_12_24_noBooth)
+  val intMul_12_24 = Module(new IntMUL_12_24)
   intMul_12_24.io.a_in := Mux(!is_16, sig_adjust_subnorm_32(0),
                           Cat(sig_adjust_subnorm_16(2), false.B, sig_adjust_subnorm_16(0), false.B))
   intMul_12_24.io.b_in := Mux(!is_16, sig_adjust_subnorm_32(1),
