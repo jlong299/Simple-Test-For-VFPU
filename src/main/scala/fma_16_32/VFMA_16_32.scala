@@ -20,9 +20,8 @@ import race.vpu.yunsuan.util._
 
 
 class VFMA_16_32 extends Module {
-  val (expWidth_bf16, sigWidth_bf16) = (8, 8)
-  val (expWidth_fp16, sigWidth_fp16) = (5, 11)
-  val (expWidth_fp32, sigWidth_fp32) = (8, 24)
+  val wResMul32 = 40  // Bits to reserve for the significand of the a*b
+  val wResMul16 = wResMul32 / 2  // Bits (FP/BF16) to reserve for the significand of the a*b
   val io = IO(new Bundle {
     val valid_in = Input(Bool())
     val is_bf16, is_fp16, is_fp32 = Input(Bool())
@@ -153,26 +152,30 @@ class VFMA_16_32 extends Module {
   val res_sign_high_S1 = RegEnable(res_sign_high, io.valid_in)
   val res_sign_low_S1 = RegEnable(res_sign_low, io.valid_in)
 
-  // Int MUL result format:
+  // Int MUL result format (when wResMul32 = 48, wResMul16 = 24):
   // xx.xxxxxxxxxxxxxx00000000  bf16 (2 + 14 + "000000" + "00")
   // xx.xxxxxxxxxxxxxxxxxxxx00  fp16 (2 + 20 + "00")
   // xx.xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx  fp32 (2 + 46)
-  val (res_intMul_high24, res_intMul_low24) = (res_intMul_S1(47, 24), res_intMul_S1(23, 0))
-  val res_intMul_48 = Mux(input_is_16_S1, res_intMul_high24 ## 0.U(24.W), res_intMul_S1)
+  val (res_intMul_high24, res_intMul_low24) = (res_intMul_S1(47, 47-wResMul16+1), res_intMul_S1(23, 23-wResMul16+1)) // wResMul16 bits
+  val res_intMul_48 = Mux(input_is_16_S1,
+          Mux(widen_S1, res_intMul_S1(47, 24), res_intMul_high24 ## 0.U((24-wResMul16).W)) ## 0.U((wResMul32-24).W),
+          res_intMul_S1(47, 47-wResMul32+1))  // wResMul32 bits
   
-  val int_part_high = res_intMul_high24(23, 22)
-  val int_part_low = res_intMul_low24(23, 22)
+  val int_part_high = res_intMul_high24(wResMul16-1, wResMul16-2)
+  val int_part_low = res_intMul_low24(wResMul16-1, wResMul16-2)
 
   // ----------------------------------------------------
   // ---- Calculate shift direction and shift amount ----
   // ----------------------------------------------------
   val (shift_right_high, shift_right_low) = (Wire(Bool()), Wire(Bool()))
-  val (shift_amount_high, shift_amount_low) = (Wire(UInt(6.W)), Wire(UInt(5.W)))
+  // val (shift_amount_high, shift_amount_low) = (Wire(UInt(6.W)), Wire(UInt(5.W)))
+  val shift_amount_high = if (wResMul32 < 32) Wire(UInt(5.W)) else Wire(UInt(6.W))
+  val shift_amount_low = if (wResMul16 < 16) Wire(UInt(4.W)) else Wire(UInt(5.W))
   val (res_is_subnorm_high, res_is_subnorm_low) = (Wire(Bool()), Wire(Bool()))
   val (res_is_inf_high_case1, res_is_inf_low_case1) = (Wire(Bool()), Wire(Bool()))
-  val lzd_low = LZD(res_intMul_low24(21, 0)) // 5 bits
-  val lzd_high = LZD(res_intMul_high24(21, 0)) // 5 bits
-  val lzd_whole = LZD(res_intMul_48(45, 0)) // 6 bits
+  val lzd_low = LZD(res_intMul_low24(wResMul16-1-2, 0)) // 4 bits (wResMul16 < 16) or 5 bits (wResMul16 >= 16)
+  val lzd_high = LZD(res_intMul_high24(wResMul16-1-2, 0)) // 4 bits (wResMul16 < 16) or 5 bits (wResMul16 >= 16)
+  val lzd_whole = LZD(res_intMul_48(wResMul32-1-2, 0)) // 5 bits (wResMul32 < 32) or 6 bits (wResMul32 >= 32)
   val exp_res_low_under_1 = 1.U - exp_res_adjsubn_low_S1 // 10 bits
   val exp_res_low_over_1 = exp_res_adjsubn_low_S1 - 1.U  // 10 bits
   val exp_res_high_under_1 = 1.U - exp_res_adjsubn_high_S1 // 10 bits
@@ -251,8 +254,8 @@ class VFMA_16_32 extends Module {
   
   //---- 对乘法的结果significand进行移位----
   //---- Shift the significand of the multiplication result
-  val sig_resMul_shifted_low = shift(res_intMul_low24, shift_amount_low, shift_right_low)  // 24 bits
-  val sig_resMul_shifted_whole = shift(res_intMul_48, shift_amount_high, shift_right_high)  // 48 bits
+  val sig_resMul_shifted_low = shift(res_intMul_low24, shift_amount_low, shift_right_low)  // wResMul16 bits
+  val sig_resMul_shifted_whole = shift(res_intMul_48, shift_amount_high, shift_right_high)  // wResMul32 bits
 
   //---- 乘法结果的exp会在此处更新 ----
   //---- the exponent of the multiplication result will be updated here
@@ -350,17 +353,19 @@ class VFMA_16_32 extends Module {
   
   // ---- Shifting of low part ----
   val exp_c_gte_ab_low = !exp_diff_low_c_minus_ab(8)
-  val c_dominates_low = exp_c_gte_ab_low && exp_diff_low_c_minus_ab(7, 5) =/= 0.U // > 31
-  val ab_dominates_low = !exp_diff_low_ab_minus_c(8) && exp_diff_low_ab_minus_c(7, 5) =/= 0.U // > 31
-  val shift_amount_ab_low, shift_amount_c_low = Wire(UInt(5.W))
+  val c_dominates_low = if (wResMul16 < 16) { exp_c_gte_ab_low && exp_diff_low_c_minus_ab(7, 4) =/= 0.U } else // > 15
+                                            { exp_c_gte_ab_low && exp_diff_low_c_minus_ab(7, 5) =/= 0.U } // > 31
+  val ab_dominates_low = if (wResMul16 < 16) { !exp_diff_low_ab_minus_c(8) && exp_diff_low_ab_minus_c(7, 4) =/= 0.U } else // > 15
+                                             { !exp_diff_low_ab_minus_c(8) && exp_diff_low_ab_minus_c(7, 5) =/= 0.U } // > 31
+  val shift_amount_ab_low, shift_amount_c_low = if (wResMul16 < 16) Wire(UInt(4.W)) else Wire(UInt(5.W))
   val shift_ab_low = Wire(Bool())
   when (c_dominates_low) {
-    shift_amount_ab_low := 31.U
+    shift_amount_ab_low := { if (wResMul16 < 16) 15.U else 31.U }
     shift_amount_c_low := 0.U
     shift_ab_low := true.B
   }.elsewhen (ab_dominates_low) {
     shift_amount_ab_low := 0.U
-    shift_amount_c_low := 31.U
+    shift_amount_c_low := { if (wResMul16 < 16) 15.U else 31.U }
     shift_ab_low := false.B
   }.elsewhen (exp_c_gte_ab_low) {
     shift_amount_ab_low := exp_diff_low_c_minus_ab(4, 0)
@@ -372,24 +377,26 @@ class VFMA_16_32 extends Module {
     shift_ab_low := false.B
   }
   // Select input of shift block, ab or c.
-  val sig_adjust_subnorm_c_low_24 = sig_adjust_subnorm_16_c(0) ## 0.U(12.W) // 24 bits
-  val shift_in_low = Mux(shift_ab_low, sig_resMul_low_S2, sig_adjust_subnorm_c_low_24) // 24 bits
-  val shift_amount_in_low = Mux(shift_ab_low, shift_amount_ab_low, shift_amount_c_low) // 5 bits
-  val shift_out_low = shift_right(shift_in_low, shift_amount_in_low) // 24 bits
+  val sig_adjust_subnorm_c_low_24 = sig_adjust_subnorm_16_c(0) ## 0.U((wResMul16-12).W) // wResMul16 bits
+  val shift_in_low = Mux(shift_ab_low, sig_resMul_low_S2, sig_adjust_subnorm_c_low_24) // wResMul16 bits
+  val shift_amount_in_low = Mux(shift_ab_low, shift_amount_ab_low, shift_amount_c_low) // 4 bits or 5 bits
+  val shift_out_low = shift_right(shift_in_low, shift_amount_in_low) // wResMul16 bits
 
   // ---- Shifting of high/whole part ----
   val exp_c_gte_ab_high = !exp_diff_high_c_minus_ab(8)
-  val c_dominates_high = exp_c_gte_ab_high && exp_diff_high_c_minus_ab(7, 6) =/= 0.U // > 63
-  val ab_dominates_high = !exp_diff_high_ab_minus_c(8) && exp_diff_high_ab_minus_c(7, 6) =/= 0.U // > 63
-  val shift_amount_ab_high, shift_amount_c_high = Wire(UInt(6.W))
+  val c_dominates_high = if (wResMul32 < 32) { exp_c_gte_ab_high && exp_diff_high_c_minus_ab(7, 5) =/= 0.U } else // > 31
+                                             { exp_c_gte_ab_high && exp_diff_high_c_minus_ab(7, 6) =/= 0.U } // > 63
+  val ab_dominates_high = if (wResMul32 < 32) { !exp_diff_high_ab_minus_c(8) && exp_diff_high_ab_minus_c(7, 5) =/= 0.U } else // > 31
+                                              { !exp_diff_high_ab_minus_c(8) && exp_diff_high_ab_minus_c(7, 6) =/= 0.U } // > 63
+  val shift_amount_ab_high, shift_amount_c_high = if (wResMul32 < 32) Wire(UInt(5.W)) else Wire(UInt(6.W))
   val shift_ab_high = Wire(Bool())
   when (c_dominates_high) {
-    shift_amount_ab_high := 63.U
+    shift_amount_ab_high := { if (wResMul32 < 32) 31.U else 63.U }
     shift_amount_c_high := 0.U
     shift_ab_high := true.B
   }.elsewhen (ab_dominates_high) {
     shift_amount_ab_high := 0.U
-    shift_amount_c_high := 63.U
+    shift_amount_c_high := { if (wResMul32 < 32) 31.U else 63.U }
     shift_ab_high := false.B
   }.elsewhen (exp_c_gte_ab_high) {
     shift_amount_ab_high := exp_diff_high_c_minus_ab(5, 0)
@@ -401,46 +408,49 @@ class VFMA_16_32 extends Module {
     shift_ab_high := false.B
   }
   // Select input of shift block, ab or c.
-  val sig_adjust_subnorm_c_whole_48 = Mux(c_is_32, sig_adjust_subnorm_32_c ## 0.U(23.W), sig_adjust_subnorm_16_c(1) ## 0.U(36.W)) // 48 bits
-  val shift_in_whole = Mux(shift_ab_high, sig_resMul_whole_S2, sig_adjust_subnorm_c_whole_48) // 48 bits
-  val shift_amount_in_whole = Mux(shift_ab_high, shift_amount_ab_high, shift_amount_c_high) // 6 bits
-  val shift_out_whole = shift_right(shift_in_whole, shift_amount_in_whole) // 48 bits
+  val sig_adjust_subnorm_c_whole_48 = Mux(c_is_32, sig_adjust_subnorm_32_c ## 0.U((wResMul32-25).W),
+                                                   sig_adjust_subnorm_16_c(1) ## 0.U((wResMul32-12).W)) // wResMul32 bits
+  val shift_in_whole = Mux(shift_ab_high, sig_resMul_whole_S2, sig_adjust_subnorm_c_whole_48) // wResMul32 bits
+  val shift_amount_in_whole = Mux(shift_ab_high, shift_amount_ab_high, shift_amount_c_high) // 5 bits or 6 bits
+  val shift_out_whole = shift_right(shift_in_whole, shift_amount_in_whole) // wResMul32 bits
 
   //---- Comparison of absolute value of ab and c ----
   // Low
-  val compare_ab_c_low_12h = compare_12b(sig_resMul_low_S2(23, 12), sig_adjust_subnorm_c_low_24(23, 12)) //high 12b
-  val compare_ab_c_low_12l_1 = sig_resMul_low_S2(11, 0) =/= 0.U // low 12b
-  val sig_ab_gt_c_low = compare_ab_c_low_12h._1 ||  // high_12b ab > c
-                        compare_ab_c_low_12h._2 && compare_ab_c_low_12l_1 // high_12b ab == c && low_12b ab > c
+  // val compare_ab_c_low_12h = compare_12b(sig_resMul_low_S2(23, 12), sig_adjust_subnorm_c_low_24(23, 12)) //high 12b
+  // val compare_ab_c_low_12l_1 = sig_resMul_low_S2(11, 0) =/= 0.U // low 12b
+  // val sig_ab_gt_c_low = compare_ab_c_low_12h._1 ||  // high_12b ab > c
+  //                       compare_ab_c_low_12h._2 && compare_ab_c_low_12l_1 // high_12b ab == c && low_12b ab > c
+  val sig_ab_gt_c_low = sig_resMul_low_S2 > sig_adjust_subnorm_c_low_24 //TODO: modify
   val exp_ab_gt_c_low = exp_diff_low_c_minus_ab(8)
   val abs_ab_gt_c_low = exp_ab_gt_c_low ||
                         exp_diff_low_ab_minus_c === 0.U && sig_ab_gt_c_low
   // Whole
-  val compare_ab_c_whole_12hh = compare_12b(sig_resMul_whole_S2(47, 36), sig_adjust_subnorm_c_whole_48(47, 36)) //high 12b
-  val compare_ab_c_whole_12hl = compare_12b(sig_resMul_whole_S2(35, 24), sig_adjust_subnorm_c_whole_48(35, 24))
-  val compare_ab_c_whole_12lh = compare_12b(sig_resMul_whole_S2(23, 12), sig_adjust_subnorm_c_whole_48(23, 12))
-  val compare_ab_c_whole_12ll_1 = sig_resMul_whole_S2(11, 0) =/= 0.U
-  val sig_ab_gt_c_whole = compare_ab_c_whole_12hh._1 ||
-                          compare_ab_c_whole_12hh._2 && compare_ab_c_whole_12hl._1 ||
-                          compare_ab_c_whole_12hh._2 && compare_ab_c_whole_12hl._2 && compare_ab_c_whole_12lh._1 ||
-                          compare_ab_c_whole_12hh._2 && compare_ab_c_whole_12hl._2 && compare_ab_c_whole_12lh._2 && compare_ab_c_whole_12ll_1
+  // val compare_ab_c_whole_12hh = compare_12b(sig_resMul_whole_S2(47, 36), sig_adjust_subnorm_c_whole_48(47, 36)) //high 12b
+  // val compare_ab_c_whole_12hl = compare_12b(sig_resMul_whole_S2(35, 24), sig_adjust_subnorm_c_whole_48(35, 24))
+  // val compare_ab_c_whole_12lh = compare_12b(sig_resMul_whole_S2(23, 12), sig_adjust_subnorm_c_whole_48(23, 12))
+  // val compare_ab_c_whole_12ll_1 = sig_resMul_whole_S2(11, 0) =/= 0.U
+  // val sig_ab_gt_c_whole = compare_ab_c_whole_12hh._1 ||
+  //                         compare_ab_c_whole_12hh._2 && compare_ab_c_whole_12hl._1 ||
+  //                         compare_ab_c_whole_12hh._2 && compare_ab_c_whole_12hl._2 && compare_ab_c_whole_12lh._1 ||
+  //                         compare_ab_c_whole_12hh._2 && compare_ab_c_whole_12hl._2 && compare_ab_c_whole_12lh._2 && compare_ab_c_whole_12ll_1
+  val sig_ab_gt_c_whole = sig_resMul_whole_S2 > sig_adjust_subnorm_c_whole_48 //TODO: modify
   val exp_ab_gt_c_whole = exp_diff_high_c_minus_ab(8)
   val abs_ab_gt_c_whole = exp_ab_gt_c_whole ||
                            exp_diff_high_ab_minus_c === 0.U && sig_ab_gt_c_whole
 
-  // sig_resMul_low_S2:   24  (2 + 22)
-  // sig_adjust_subnorm_c_low_24: 24  (2 + 22)
-  // shift_out_low: 24
+  // sig_resMul_low_S2:   wResMul16  (2 + wResMul16-2)
+  // sig_adjust_subnorm_c_low_24: wResMul16  (2 + wResMul16-2)
+  // shift_out_low: wResMul16
   
-  // sig_resMul_whole_S2: 48  (2 + 46)
-  // sig_adjust_subnorm_c_whole_48: 48  (2 + 46)
-  // shift_out_whole: 48
+  // sig_resMul_whole_S2: wResMul32  (2 + wResMul32-2)
+  // sig_adjust_subnorm_c_whole_48: wResMul32  (2 + wResMul32-2)
+  // shift_out_whole: wResMul32
   
   //-----------------------------------------
-  // Addition:   24 24
-  //           + 24 24
+  // Addition:   wResMul16 wResMul16
+  //           + wResMul16 wResMul16
   //-----------------------------------------
-  //---- Adder-48 is made of two adder-24s 
+  //---- Adder-48 is made of two adder-24s    (48 -> wResMul32, 24 -> wResMul16)
   //-----------------------------------------
   val adderIn_ab_low_24 = Mux(shift_ab_low, shift_out_low, sig_resMul_low_S2)
   val adderIn_c_low_24 = Mux(!shift_ab_low, shift_out_low, sig_adjust_subnorm_c_low_24)
@@ -467,23 +477,23 @@ class VFMA_16_32 extends Module {
   val adderIn_ab_whole_48_inv = Mux(ab_c_diffSign_high && !abs_ab_gt_c_whole, ~adderIn_ab_whole_48, adderIn_ab_whole_48)
   val adderIn_c_whole_48_inv = Mux(ab_c_diffSign_high && abs_ab_gt_c_whole, ~adderIn_c_whole_48, adderIn_c_whole_48)
   
-  val adderIn_ab_high_24_final = adderIn_ab_whole_48_inv(47, 24)
-  val adderIn_c_high_24_final = adderIn_c_whole_48_inv(47, 24)
-  val adderIn_ab_low_24_final = Mux(res_is_32_S2, adderIn_ab_whole_48_inv(23, 0), adderIn_ab_low_24_inv)
-  val adderIn_c_low_24_final = Mux(res_is_32_S2, adderIn_c_whole_48_inv(23, 0), adderIn_c_low_24_inv)
+  val adderIn_ab_high_24_final = adderIn_ab_whole_48_inv(wResMul32-1, wResMul16)
+  val adderIn_c_high_24_final = adderIn_c_whole_48_inv(wResMul32-1, wResMul16)
+  val adderIn_ab_low_24_final = Mux(res_is_32_S2, adderIn_ab_whole_48_inv(wResMul16-1, 0), adderIn_ab_low_24_inv)
+  val adderIn_c_low_24_final = Mux(res_is_32_S2, adderIn_c_whole_48_inv(wResMul16-1, 0), adderIn_c_low_24_inv)
 
   // Low 24-bit adder
   val adderIn_cin_low = Mux(res_is_32_S2, ab_c_diffSign_high, ab_c_diffSign_low)
   //                             cout                             cin for negative addend
   val adderOut_low_26_temp = Cat(false.B, adderIn_ab_low_24_final, adderIn_cin_low) +
                              Cat(false.B, adderIn_c_low_24_final, adderIn_cin_low)
-  val adderOut_low_cout = adderOut_low_26_temp(25)
-  val adderOut_low_24 = adderOut_low_26_temp(24, 1) // 24 bits
+  val adderOut_low_cout = adderOut_low_26_temp(wResMul16+1)
+  val adderOut_low_24 = adderOut_low_26_temp(wResMul16, 1) // wResMul16 bits
 
   // High 24-bit adder                                      cin: low-cout (fp32) or negative addend (bf/fp16)
   val adderOut_high_25_temp = Cat(adderIn_ab_high_24_final, Mux(res_is_32_S2, adderOut_low_cout, ab_c_diffSign_high)) +
                               Cat(adderIn_c_high_24_final, Mux(res_is_32_S2, adderOut_low_cout, ab_c_diffSign_high))
-  val adderOut_high_24 = adderOut_high_25_temp(24, 1) // 24 bits
+  val adderOut_high_24 = adderOut_high_25_temp(wResMul16, 1) // wResMul16 bits
 
   val adderOut_sign_low = Mux(ab_c_diffSign_low, 
                               Mux(abs_ab_gt_c_low, resMul_sign_low_S2, sign_c_low),
@@ -537,21 +547,22 @@ class VFMA_16_32 extends Module {
   val adderOut_is_inf_high = resMul_is_inf_high_S3 || is_inf_high_c_S3 ||
                              exp_adderOut_high === Mux(res_is_fp16_S3, "b00011111".U, "b11111111".U)
   
-  val adderOut_int_part_low = adderOut_low_S3(23, 22)
-  val adderOut_int_part_high = adderOut_high_S3(23, 22)
+  val adderOut_int_part_low = adderOut_low_S3(wResMul16-1, wResMul16-2)
+  val adderOut_int_part_high = adderOut_high_S3(wResMul16-1, wResMul16-2)
   val adderOut_isZero_low, adderOut_isZero_high = Wire(Bool())
 
   // ---- Calculate shift amount of adder out----
   // ----  (shift direction is left) ----
   val adderOut_is_subnorm_high, adderOut_is_subnorm_low = Wire(Bool())
   val adderOut_is_inf_high_case1, adderOut_is_inf_low_case1 = Wire(Bool())
-  val (adderOut_shift_amount_high, adderOut_shift_amount_low) = (Wire(UInt(6.W)), Wire(UInt(5.W)))
+  val adderOut_shift_amount_high = if (wResMul32 < 32) Wire(UInt(5.W)) else Wire(UInt(6.W))
+  val adderOut_shift_amount_low = if (wResMul16 < 16) Wire(UInt(4.W)) else Wire(UInt(5.W))
   val exp_adderOut_tobe_subtracted_high, exp_adderOut_tobe_subtracted_low = Wire(UInt(8.W))
   val exp_adderOut_high_over_1 = exp_adderOut_high - 1.U // 8 bits
   val exp_adderOut_low_over_1 = exp_adderOut_low - 1.U // 8 bits
-  val lzd_adderOut_low = LZD(adderOut_low_S3(21, 0)) // 5 bits
-  val lzd_adderOut_high = LZD(adderOut_high_S3(21, 0)) // 5 bits
-  val lzd_adderOut_whole = LZD(adderOut_whole_S3(45, 0)) // 5 bits
+  val lzd_adderOut_low = LZD(adderOut_low_S3(wResMul16-1-2, 0)) // 4 bits or 5 bits (wResMul16 >= 16)
+  val lzd_adderOut_high = LZD(adderOut_high_S3(wResMul16-1-2, 0)) // 4 bits or 5 bits (wResMul16 >= 16)
+  val lzd_adderOut_whole = LZD(adderOut_whole_S3(wResMul32-1-2, 0)) // 5 bits (wResMul32 < 32) or 6 bits (wResMul32 >= 32)
   // Low part
   when (adderOut_int_part_low(1)) { // integer part >= 2
     adderOut_is_subnorm_low := false.B
@@ -578,7 +589,7 @@ class VFMA_16_32 extends Module {
       adderOut_is_subnorm_low := false.B
       adderOut_shift_amount_low := lzd_adderOut_low + 2.U
       exp_adderOut_tobe_subtracted_low := lzd_adderOut_low + 1.U
-      adderOut_isZero_low := lzd_adderOut_low === 22.U
+      adderOut_isZero_low := lzd_adderOut_low === (wResMul16-2).U
     }
     adderOut_is_inf_low_case1 := false.B
   }
@@ -610,13 +621,13 @@ class VFMA_16_32 extends Module {
       adderOut_is_subnorm_high := false.B
       adderOut_shift_amount_high := lzd_adderOut_high_or_whole + 2.U
       exp_adderOut_tobe_subtracted_high := lzd_adderOut_high_or_whole + 1.U
-      adderOut_isZero_high := lzd_adderOut_high_or_whole === Mux(res_is_32_S3, 46.U, 22.U)
+      adderOut_isZero_high := lzd_adderOut_high_or_whole === Mux(res_is_32_S3, (wResMul32-2).U, (wResMul16-2).U)
     }
     adderOut_is_inf_high_case1 := false.B
   }
 
-  val sig_adderOut_shifted_low = shift_left(adderOut_low_S3, adderOut_shift_amount_low)(23, 0) // 24 bits
-  val sig_adderOut_shifted_whole = shift_left(adderOut_whole_S3, adderOut_shift_amount_high)(47, 0) // 48 bits
+  val sig_adderOut_shifted_low = shift_left(adderOut_low_S3, adderOut_shift_amount_low)(wResMul16-1, 0) // wResMul16 bits
+  val sig_adderOut_shifted_whole = shift_left(adderOut_whole_S3, adderOut_shift_amount_high)(wResMul32-1, 0) // wResMul32 bits
 
   val exp_adderOut_shifted_low = exp_adderOut_low - exp_adderOut_tobe_subtracted_low
   val exp_adderOut_shifted_high = exp_adderOut_high - exp_adderOut_tobe_subtracted_high
@@ -625,32 +636,32 @@ class VFMA_16_32 extends Module {
   //---- (1) Calculate LSB, Guard bit, Sticky bit, and significand
   // Low 16: before rounding: 23.22 21 20 --- 1 0
   // fp16
-  val lsb_adderOut_low16_fp16 = sig_adderOut_shifted_low(13) // LSB
-  val g_adderOut_low16_fp16 = sig_adderOut_shifted_low(12) // Guard bit
-  val s_adderOut_low16_fp16 = sig_adderOut_shifted_low(11, 0).orR // Sticky bit
-  val sigEff_adderOut_low16_fp16 = sig_adderOut_shifted_low(23, 13) // 11 bits
+  val lsb_adderOut_low16_fp16 = sig_adderOut_shifted_low(wResMul16-1-10) // LSB
+  val g_adderOut_low16_fp16 = sig_adderOut_shifted_low(wResMul16-1-10-1) // Guard bit
+  val s_adderOut_low16_fp16 = sig_adderOut_shifted_low(wResMul16-1-10-2, 0).orR // Sticky bit
+  val sigEff_adderOut_low16_fp16 = sig_adderOut_shifted_low(wResMul16-1, wResMul16-1-10) // 11 bits
   // bf16
-  val lsb_adderOut_low16_bf16 = sig_adderOut_shifted_low(16) // LSB
-  val g_adderOut_low16_bf16 = sig_adderOut_shifted_low(15) // Guard bit
-  val s_adderOut_low16_bf16 = sig_adderOut_shifted_low(14, 12).orR || s_adderOut_low16_fp16 // Sticky bit
-  val sigEff_adderOut_low16_bf16 = sig_adderOut_shifted_low(23, 16) // 8 bits
+  val lsb_adderOut_low16_bf16 = sig_adderOut_shifted_low(wResMul16-1-7) // LSB
+  val g_adderOut_low16_bf16 = sig_adderOut_shifted_low(wResMul16-1-7-1) // Guard bit
+  val s_adderOut_low16_bf16 = sig_adderOut_shifted_low(wResMul16-1-7-2, wResMul16-1-7-4).orR || s_adderOut_low16_fp16 // Sticky bit
+  val sigEff_adderOut_low16_bf16 = sig_adderOut_shifted_low(wResMul16-1, wResMul16-1-7) // 8 bits
   // High 16: before rounding: 47.46 45 44 --- 25 24
-  val sig_adderOut_shifted_high = sig_adderOut_shifted_whole(47, 24) // 24 bits
+  val sig_adderOut_shifted_high = sig_adderOut_shifted_whole(wResMul32-1, wResMul16) // wResMul32 bits
   // fp16
-  val lsb_adderOut_high16_fp16 = sig_adderOut_shifted_high(13) // LSB
-  val g_adderOut_high16_fp16 = sig_adderOut_shifted_high(12) // Guard bit
-  val s_adderOut_high16_fp16 = sig_adderOut_shifted_high(11, 0).orR // Sticky bit
-  val sigEff_adderOut_high16_fp16 = sig_adderOut_shifted_high(23, 13) // 11 bits
+  val lsb_adderOut_high16_fp16 = sig_adderOut_shifted_high(wResMul16-1-10) // LSB
+  val g_adderOut_high16_fp16 = sig_adderOut_shifted_high(wResMul16-1-10-1) // Guard bit
+  val s_adderOut_high16_fp16 = sig_adderOut_shifted_high(wResMul16-1-10-2, 0).orR // Sticky bit
+  val sigEff_adderOut_high16_fp16 = sig_adderOut_shifted_high(wResMul16-1, wResMul16-1-10) // 11 bits
   // bf16
-  val lsb_adderOut_high16_bf16 = sig_adderOut_shifted_high(16) // LSB
-  val g_adderOut_high16_bf16 = sig_adderOut_shifted_high(15) // Guard bit
-  val s_adderOut_high16_bf16 = sig_adderOut_shifted_high(14, 12).orR || s_adderOut_high16_fp16 // Sticky bit
-  val sigEff_adderOut_high16_bf16 = sig_adderOut_shifted_high(23, 16) // 8 bits
+  val lsb_adderOut_high16_bf16 = sig_adderOut_shifted_high(wResMul16-1-7) // LSB
+  val g_adderOut_high16_bf16 = sig_adderOut_shifted_high(wResMul16-1-7-1) // Guard bit
+  val s_adderOut_high16_bf16 = sig_adderOut_shifted_high(wResMul16-1-7-2, wResMul16-1-7-4).orR || s_adderOut_high16_fp16 // Sticky bit
+  val sigEff_adderOut_high16_bf16 = sig_adderOut_shifted_high(wResMul16-1, wResMul16-1-7) // 8 bits
   // 32: before rounding: 47.46 45 44 --- 1 0
-  val lsb_adderOut_whole32 = sig_adderOut_shifted_whole(24) // LSB
-  val g_adderOut_whole32 = sig_adderOut_shifted_whole(25) // Guard bit
-  val s_adderOut_whole32 = sig_adderOut_shifted_whole(26, 15).orR || s_adderOut_low16_bf16 // Sticky bit
-  val sigEff_adderOut_whole32 = sig_adderOut_shifted_whole(47, 24) // 24 bits
+  val lsb_adderOut_whole32 = sig_adderOut_shifted_whole(wResMul32-1-23) // LSB
+  val g_adderOut_whole32 = sig_adderOut_shifted_whole(wResMul32-1-23-1) // Guard bit
+  val s_adderOut_whole32 = sig_adderOut_shifted_whole(wResMul32-1-23-2, 0).orR
+  val sigEff_adderOut_whole32 = sig_adderOut_shifted_whole(wResMul32-1, wResMul32-1-23) // 24 bits
 
   //---- (2) Calculate final significand and exponent of result ----
   // Low fp16

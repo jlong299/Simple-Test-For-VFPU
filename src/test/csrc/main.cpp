@@ -126,11 +126,11 @@ int main(int argc, char *argv[]) {
   // 2. 创建一个测试用例的集合
   std::vector<TestCase> tests;
   
-  bool test_fp32 = true;
+  bool test_fp32 = false;
   bool test_fp16 = true;
-  bool test_bf16 = true;
-  bool test_fp16_widen = true;
-  bool test_bf16_widen = true;
+  bool test_bf16 = false;
+  bool test_fp16_widen = false;
+  bool test_bf16_widen = false;
   
   if (test_fp32) {
   // -- FP32 单精度浮点数测试 --

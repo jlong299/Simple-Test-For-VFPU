@@ -25,7 +25,7 @@ class top extends Module{
     val valid_out = Output(Bool())
   })
 
-  val fma = Module(new FMA_16_32)
+  val fma = Module(new VFMA_16_32)
   fma.io.valid_in := io.valid_in
   fma.io.is_bf16 := io.is_bf16
   fma.io.is_fp16 := io.is_fp16
