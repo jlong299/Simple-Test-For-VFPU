@@ -8,6 +8,7 @@
   *   1) For widen instrn, input bf/fp16 should be the highest half of the 32-bit input !
   *   2) NaN is not supported
   *   3) Rounding mode only supports RNE
+  *   4) wResMul32 is tunable parameter: larger wResMul32 means better precision and higher hardware cost
   */
 
 package race.vpu.exu.laneexu.fp
@@ -18,9 +19,8 @@ import race.vpu._
 import VParams._
 import race.vpu.yunsuan.util._
 
-
 class VFMA_16_32 extends Module {
-  val wResMul32 = 40  // Bits to reserve for the significand of the a*b
+  val wResMul32 = 36  // Bits to reserve for the significand of the a*b
   val wResMul16 = wResMul32 / 2  // Bits (FP/BF16) to reserve for the significand of the a*b
   val io = IO(new Bundle {
     val valid_in = Input(Bool())
@@ -416,24 +416,12 @@ class VFMA_16_32 extends Module {
 
   //---- Comparison of absolute value of ab and c ----
   // Low
-  // val compare_ab_c_low_12h = compare_12b(sig_resMul_low_S2(23, 12), sig_adjust_subnorm_c_low_24(23, 12)) //high 12b
-  // val compare_ab_c_low_12l_1 = sig_resMul_low_S2(11, 0) =/= 0.U // low 12b
-  // val sig_ab_gt_c_low = compare_ab_c_low_12h._1 ||  // high_12b ab > c
-  //                       compare_ab_c_low_12h._2 && compare_ab_c_low_12l_1 // high_12b ab == c && low_12b ab > c
-  val sig_ab_gt_c_low = sig_resMul_low_S2 > sig_adjust_subnorm_c_low_24 //TODO: modify
+  val sig_ab_gt_c_low = sig_resMul_low_S2 > sig_adjust_subnorm_c_low_24
   val exp_ab_gt_c_low = exp_diff_low_c_minus_ab(8)
   val abs_ab_gt_c_low = exp_ab_gt_c_low ||
                         exp_diff_low_ab_minus_c === 0.U && sig_ab_gt_c_low
   // Whole
-  // val compare_ab_c_whole_12hh = compare_12b(sig_resMul_whole_S2(47, 36), sig_adjust_subnorm_c_whole_48(47, 36)) //high 12b
-  // val compare_ab_c_whole_12hl = compare_12b(sig_resMul_whole_S2(35, 24), sig_adjust_subnorm_c_whole_48(35, 24))
-  // val compare_ab_c_whole_12lh = compare_12b(sig_resMul_whole_S2(23, 12), sig_adjust_subnorm_c_whole_48(23, 12))
-  // val compare_ab_c_whole_12ll_1 = sig_resMul_whole_S2(11, 0) =/= 0.U
-  // val sig_ab_gt_c_whole = compare_ab_c_whole_12hh._1 ||
-  //                         compare_ab_c_whole_12hh._2 && compare_ab_c_whole_12hl._1 ||
-  //                         compare_ab_c_whole_12hh._2 && compare_ab_c_whole_12hl._2 && compare_ab_c_whole_12lh._1 ||
-  //                         compare_ab_c_whole_12hh._2 && compare_ab_c_whole_12hl._2 && compare_ab_c_whole_12lh._2 && compare_ab_c_whole_12ll_1
-  val sig_ab_gt_c_whole = sig_resMul_whole_S2 > sig_adjust_subnorm_c_whole_48 //TODO: modify
+  val sig_ab_gt_c_whole = sig_resMul_whole_S2 > sig_adjust_subnorm_c_whole_48
   val exp_ab_gt_c_whole = exp_diff_high_c_minus_ab(8)
   val abs_ab_gt_c_whole = exp_ab_gt_c_whole ||
                            exp_diff_high_ab_minus_c === 0.U && sig_ab_gt_c_whole
@@ -766,29 +754,5 @@ class VFMA_16_32 extends Module {
   }
   def shift_left(data: UInt, shift_amount: UInt): UInt = {
     data << shift_amount
-  }
-
-  // Compare a with b (3 bits)       a>b   a==b
-  def compare_3b(a: UInt, b: UInt): (Bool, Bool) = {
-    require(a.getWidth == 3 && b.getWidth == 3)
-    val gt, eq = Wire(Vec(3, Bool()))
-    for (i <- 0 until 3) {
-      gt(i) := a(i) && !b(i)
-      eq(i) := a(i) === b(i)
-    }
-    (gt(2) || eq(2) && gt(1) || eq(2) && eq(1) && gt(0), eq.reduce(_ && _))
-  }
-  // Compare a with b (6 bits)       a>b   a==b
-  def compare_6b(a: UInt, b: UInt): (Bool, Bool) = {
-    val (high_gt, high_eq) = compare_3b(a(5, 3), b(5, 3))
-    val (low_gt, low_eq) = compare_3b(a(2, 0), b(2, 0))
-    (high_gt || high_eq && low_gt, high_eq && low_eq)
-  }
-  // Compare a with b (12 bits)       a>b   a==b
-  def compare_12b(a: UInt, b: UInt): (Bool, Bool) = {
-    require(a.getWidth == 12 && b.getWidth == 12)
-    val (high_gt, high_eq) = compare_6b(a(11, 6), b(11, 6))
-    val (low_gt, low_eq) = compare_6b(a(5, 0), b(5, 0))
-    (high_gt || high_eq && low_gt, high_eq && low_eq)
   }
 }
