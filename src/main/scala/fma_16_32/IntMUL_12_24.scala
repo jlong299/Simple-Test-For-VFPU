@@ -133,8 +133,8 @@ class IntMUL_12_24 extends Module {
   /**
    *  Second pipeline stage: 48 + 48
    */
-  val is16S1 = RegNext(io.is_16)
-  val wallaceOutReg = wallaceOut map {x => RegNext(x)}
+  val is16S1 = RegEnable(io.is_16, io.valid_in)
+  val wallaceOutReg = wallaceOut map {x => RegEnable(x, io.valid_in)}
 
   //---- Sum of final two 48b numbers ----
   // 1. Low 24 bits sum
