@@ -20,7 +20,7 @@ import VParams._
 import race.vpu.yunsuan.util._
 
 class VFMA_16_32 extends Module {
-  val wResMul32 = 36  // Bits to reserve for the significand of the a*b
+  val wResMul32 = 36  // Bits to reserve for the significand of the a*b (range: 28 ~ 48)
   val wResMul16 = wResMul32 / 2  // Bits (FP/BF16) to reserve for the significand of the a*b
   val io = IO(new Bundle {
     val valid_in = Input(Bool())
@@ -31,6 +31,7 @@ class VFMA_16_32 extends Module {
     val c_in = Input(UInt(32.W))
     val res_out = Output(UInt(32.W))
     val valid_out = Output(Bool())
+    val valid_S1, valid_S2 = Output(Bool())
   })
 
   val (is_bf16, is_fp16, is_fp32) = (io.is_bf16, io.is_fp16, io.is_fp32)
@@ -741,6 +742,8 @@ class VFMA_16_32 extends Module {
   
   io.res_out := Mux(res_is_32_S3, res_out_whole32, res_out_high16 ## res_out_low16)
   io.valid_out := valid_S3
+  io.valid_S1 := valid_S1
+  io.valid_S2 := valid_S2
 
 
   def shift(data: UInt, shift_amount: UInt, shift_right: Bool): UInt = {
