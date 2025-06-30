@@ -38,6 +38,17 @@ class VFMAWrapper extends Module {
   val uop = io.in.bits.uop
   val (vs1, vs2, vs3) = (io.in.bits.vs1, io.in.bits.vs2, io.in.bits.vs3)
   val rs1 = Mux(io.sewIn.is16, Fill(4, io.in.bits.rs1(15, 0)), Fill(2, io.in.bits.rs1(31, 0)))
+  
+  // Widen case:
+  //       32         32
+  //    ---------  ---------
+  //             |
+  //             v   (mux by uopIdx(0))
+  //         --------- 32
+  //    |            |
+  //    v            v
+  //  ----   ----   ----   ----
+  //   16     16     16     16
   def widen_sel(vs: UInt): UInt = {  // vs is 64 bits
     val (fma1_high, fma1_low, fma0_high, fma0_low) = (vs(63, 48), vs(47, 32), vs(31, 16), vs(15, 0))
     val vs_32b = Mux(uop.uopIdx(0), vs(63, 32), vs(31, 0))
