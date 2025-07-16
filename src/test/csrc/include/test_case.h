@@ -1,8 +1,9 @@
-#ifndef __SIM_H__
-#define __SIM_H__
+#ifndef __TEST_CASE_H__
+#define __TEST_CASE_H__
 
-#include <stdint.h>
-#include <memory>
+#include <cstdint>
+
+#include "fp_utils.h"
 
 // 定义FMA操作数结构体
 struct FMA_Operands {
@@ -44,14 +45,6 @@ enum class ErrorType {
     RelativeError, // 相对误差
     ULP_or_RelativeError // 允许若干 ulp 或 相对误差
 };
-
-// 前向声明Verilator相关类，避免在头文件中#include "Vtop.h"
-class Vtop;
-class VerilatedContext;
-
-#ifdef VCD
-class VerilatedVcdC;
-#endif
 
 // 用于从仿真器传递DUT输出到TestCase进行检查的结构体
 struct DutOutputs {
@@ -114,30 +107,4 @@ private:
     uint16_t expected_res1_bf16, expected_res2_bf16;
 };
 
-
-// ===================================================================
-// Simulator 类: 封装Verilator仿真控制
-// ===================================================================
-class Simulator {
-public:
-    Simulator(int argc, char* argv[]);
-    ~Simulator();
-
-    bool run_test(const TestCase& test);
-    void reset(int n);
-
-private:
-    void init_vcd();
-    void single_cycle();
-    
-    // Verilator核心对象
-    std::unique_ptr<VerilatedContext> contextp_;
-    std::unique_ptr<Vtop> top_;
-
-    // VCD波形跟踪器
-#ifdef VCD
-    VerilatedVcdC* tfp_ = nullptr;
-#endif
-};
-
-#endif
+#endif // __TEST_CASE_H__ 

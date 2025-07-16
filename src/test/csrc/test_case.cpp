@@ -1,19 +1,9 @@
-// sim_c/sim.cc
+#include "include/test_case.h"
 #include <iostream>
 #include <bitset>
 #include <memory>
-#include <cmath> // For std::abs
-
-#include <verilated.h>
-#include "Vtop.h"
-#ifdef VCD
-    #include "verilated_vcd_c.h"
-#endif
-
-#include "sim.h"
-#include "fp.h"
-
-using namespace std; 
+#include <cmath>
+#include <cstring>
 
 // ===================================================================
 // TestCase 实现
@@ -499,264 +489,52 @@ bool TestCase::check_result(const DutOutputs& dut_res) const {
                 pass1 = ulp_pass1 || rel_pass1;
                 pass2 = ulp_pass2 || rel_pass2;
                 
-                printf("ULP pass1: %s, ULP pass2: %s\n", ulp_pass1 ? "true" : "false", ulp_pass2 ? "true" : "false");
-                printf("Rel pass1: %s, Rel pass2: %s\n", rel_pass1 ? "true" : "false", rel_pass2 ? "true" : "false");
-                printf("ULP diff1: %d, ULP diff2: %d\n", ulp_diff1, ulp_diff2);
-                printf("Relative error1: %.6e, Relative error2: %.6e\n", relative_error1, relative_error2);
-                
                 if (!pass1) {
-                    printf("ERROR OP1: Expected 0x%x (%.4f), Got 0x%x (%.4f), ULP diff: %d, Relative Error: %e\n", 
-                           expected_res1_bf16, expected1_fp, dut_res.res_out_16_0, dut_res1_fp, ulp_diff1, relative_error1);
+                    printf("ERROR OP1: ULP diff: %d (>2), Relative Error: %e (>8e-3)\n", ulp_diff1, relative_error1);
                 }
                 if (!pass2) {
-                    printf("ERROR OP2: Expected 0x%x (%.4f), Got 0x%x (%.4f), ULP diff: %d, Relative Error: %e\n", 
-                           expected_res2_bf16, expected2_fp, dut_res.res_out_16_1, dut_res2_fp, ulp_diff2, relative_error2);
+                    printf("ERROR OP2: ULP diff: %d (>2), Relative Error: %e (>8e-3)\n", ulp_diff2, relative_error2);
                 }
+                printf("ULP diff1: %d, ULP diff2: %d\n", ulp_diff1, ulp_diff2);
+                printf("Relative error1: %.6e, Relative error2: %.6e\n", relative_error1, relative_error2);
             }
             
             pass = pass1 && pass2;
             break;
         }
-        case TestMode::FP16_Widen: {
-            // FP16 Widen模式：输出是FP32
-            float dut_res_fp;
-            memcpy(&dut_res_fp, &dut_res.res_out_32, sizeof(float));
-            printf("DUT Result: %.8f (HEX: 0x%08X)\n", dut_res_fp, dut_res.res_out_32);
-            float expected_fp;
-            memcpy(&expected_fp, &expected_res_fp32, sizeof(float));
-            int64_t ulp_diff = 0;
-            float relative_error = 0;
-
-            bool precise_pass = (dut_res.res_out_32 == expected_res_fp32);
-            
-            // 如果两个数都是0（忽略符号位），认为通过
-            bool both_zero = both_fp32_zero(dut_res.res_out_32, expected_res_fp32);
-            
-            if (error_type == ErrorType::Precise) {
-                pass = precise_pass || both_zero;
-            }
-            if (error_type == ErrorType::ULP) {
-                // 允许8 ulp (unit in the last place) 的误差
-                ulp_diff = std::abs((int64_t)dut_res.res_out_32 - (int64_t)expected_res_fp32);
-                pass = (ulp_diff <= 8) || both_zero;
-            }
-            if (error_type == ErrorType::RelativeError) {
-                float max_abs = std::max(std::abs(op_fp.a * op_fp.b), std::abs(op_fp.c));
-                relative_error = std::abs(dut_res_fp - expected_fp) / max_abs;
-                pass = ((max_abs < std::pow(2, -60)) 
-                       ? (relative_error < 1e-3) //若ab或c的绝对值太小，则放宽误差要求
-                       : (relative_error < 1e-5)) 
-                       || precise_pass || both_zero;
-            }
-            if (!pass) {
-                if (error_type == ErrorType::Precise) {
-                    printf("ERROR: Expected 0x%08X, Got 0x%08X (Exact match required)\n", 
-                           expected_res_fp32, dut_res.res_out_32);
-                }
-                if (error_type == ErrorType::ULP) {
-                    printf("ERROR: Expected 0x%08X, Got 0x%08X, ULP diff: %ld\n", 
-                           expected_res_fp32, dut_res.res_out_32, ulp_diff);
-                }
-                if (error_type == ErrorType::RelativeError) {
-                    printf("ERROR: Expected 0x%08X, Got 0x%08X, Relative Error: %f\n", 
-                           expected_res_fp32, dut_res.res_out_32, relative_error);
-                }
-            }
-            if (error_type == ErrorType::ULP) {
-                printf("ULP diff: %ld\n", ulp_diff);
-            }
-            if (error_type == ErrorType::RelativeError) {
-                printf("Relative diff ratio: %.8e\n", relative_error);
-            }
-            break;
-        }
-        case TestMode::BF16_Widen: {
-            // FP16 Widen模式：输出是FP32
-            float dut_res_fp;
-            memcpy(&dut_res_fp, &dut_res.res_out_32, sizeof(float));
-            printf("DUT Result: %.8f (HEX: 0x%08X)\n", dut_res_fp, dut_res.res_out_32);
-            float expected_fp;
-            memcpy(&expected_fp, &expected_res_fp32, sizeof(float));
-            int64_t ulp_diff = 0;
-            float relative_error = 0;
-
-            bool precise_pass = (dut_res.res_out_32 == expected_res_fp32);
-            
-            // 如果两个数都是0（忽略符号位），认为通过
-            bool both_zero = both_fp32_zero(dut_res.res_out_32, expected_res_fp32);
-            
-            if (error_type == ErrorType::Precise) {
-                pass = precise_pass || both_zero;
-            }
-            if (error_type == ErrorType::ULP) {
-                // 允许8 ulp (unit in the last place) 的误差
-                ulp_diff = std::abs((int64_t)dut_res.res_out_32 - (int64_t)expected_res_fp32);
-                pass = (ulp_diff <= 8) || both_zero;
-            }
-            if (error_type == ErrorType::RelativeError) {
-                float max_abs = std::max(std::abs(op_fp.a * op_fp.b), std::abs(op_fp.c));
-                relative_error = std::abs(dut_res_fp - expected_fp) / max_abs;
-                pass = ((max_abs < std::pow(2, -60)) 
-                       ? (relative_error < 1e-3) //若ab或c的绝对值太小，则放宽误差要求
-                       : (relative_error < 1e-5)) 
-                       || precise_pass || both_zero;
-            }
-            if (!pass) {
-                if (error_type == ErrorType::Precise) {
-                    printf("ERROR: Expected 0x%08X, Got 0x%08X (Exact match required)\n", 
-                           expected_res_fp32, dut_res.res_out_32);
-                }
-                if (error_type == ErrorType::ULP) {
-                    printf("ERROR: Expected 0x%08X, Got 0x%08X, ULP diff: %ld\n", 
-                           expected_res_fp32, dut_res.res_out_32, ulp_diff);
-                }
-                if (error_type == ErrorType::RelativeError) {
-                    printf("ERROR: Expected 0x%08X, Got 0x%08X, Relative Error: %f\n", 
-                           expected_res_fp32, dut_res.res_out_32, relative_error);
-                }
-            }
-            if (error_type == ErrorType::ULP) {
-                printf("ULP diff: %ld\n", ulp_diff);
-            }
-            if (error_type == ErrorType::RelativeError) {
-                printf("Relative diff ratio: %.8e\n", relative_error);
-            }
-            break;
-        }
-    }
-
-    if (pass) {
-        printf(">>> PASSED <<<\n\n");
-    } else {
-        printf(">>> FAILED <<<\n\n");
-    }
-    return pass;
-}
-
-// ===================================================================
-// Simulator 实现
-// ===================================================================
-Simulator::Simulator(int argc, char* argv[]) {
-    contextp_ = std::make_unique<VerilatedContext>();
-    top_ = std::make_unique<Vtop>(contextp_.get(), "TOP");
-    Verilated::commandArgs(argc, argv);
-#ifdef VCD
-    init_vcd();
-#endif
-}
-
-Simulator::~Simulator() {
-    top_->final();
-#if VCD
-    if (tfp_) {
-        tfp_->close();
-        tfp_ = nullptr;
-    }
-#endif
-}
-
-void Simulator::init_vcd() {
-#ifdef VCD
-    contextp_->traceEverOn(true);
-    tfp_ = new VerilatedVcdC;
-    top_->trace(tfp_, 99);
-    tfp_->open("build/fma/top.vcd");
-#endif
-}
-
-void Simulator::single_cycle() {
-    contextp_->timeInc(5);
-    top_->clock = 0; top_->eval();
-#ifdef VCD
-    if (tfp_) tfp_->dump(contextp_->time());
-#endif
-
-    contextp_->timeInc(5);
-    top_->clock = 1; top_->eval();
-#ifdef VCD
-    if (tfp_) tfp_->dump(contextp_->time());
-#endif
-}
-
-void Simulator::reset(int n) {
-    top_->reset = 1;
-    while (n-- > 0) single_cycle();
-    top_->reset = 0;
-    top_->eval();
-}
-
-bool Simulator::run_test(const TestCase& test) {
-    // 1. 设置控制信号
-    top_->io_valid_in = 1;
-    top_->io_is_fp32  = test.is_fp32;
-    top_->io_is_fp16  = test.is_fp16;
-    top_->io_is_bf16  = test.is_bf16;
-    top_->io_is_widen = test.is_widen;
-
-    // 2. 根据模式设置数据输入端口
-    switch(test.mode) {
-        case TestMode::FP32:
-            top_->io_a_in_32 = test.a_fp32_bits;
-            top_->io_b_in_32 = test.b_fp32_bits;
-            top_->io_c_in_32 = test.c_fp32_bits;
-            break;
-        case TestMode::FP16:
-            // 注意：Verilator会把 a_in_16: Vec(2, UInt(16.W)) 转换成 io_a_in_16_0, io_a_in_16_1
-            top_->io_a_in_16_0 = test.a1_fp16_bits;
-            top_->io_b_in_16_0 = test.b1_fp16_bits;
-            top_->io_c_in_16_0 = test.c1_fp16_bits;
-            top_->io_a_in_16_1 = test.a2_fp16_bits;
-            top_->io_b_in_16_1 = test.b2_fp16_bits;
-            top_->io_c_in_16_1 = test.c2_fp16_bits;
-            break;
-        case TestMode::BF16:
-            // BF16也使用16位端口
-            top_->io_a_in_16_0 = test.a1_bf16_bits;
-            top_->io_b_in_16_0 = test.b1_bf16_bits;
-            top_->io_c_in_16_0 = test.c1_bf16_bits;
-            top_->io_a_in_16_1 = test.a2_bf16_bits;
-            top_->io_b_in_16_1 = test.b2_bf16_bits;
-            top_->io_c_in_16_1 = test.c2_bf16_bits;
-            break;
         case TestMode::FP16_Widen:
-            // FP16 Widen: a,b是FP16（通过32位端口，高16位为FP16），c是FP32
-            top_->io_a_in_16_0 = test.a_fp32_bits & 0xFFFF;          // 低16位
-            top_->io_a_in_16_1 = (test.a_fp32_bits >> 16) & 0xFFFF;  // 高16位
-            top_->io_b_in_16_0 = test.b_fp32_bits & 0xFFFF;          // 低16位
-            top_->io_b_in_16_1 = (test.b_fp32_bits >> 16) & 0xFFFF;  // 高16位
-            top_->io_c_in_32 = test.c_fp32_bits;
-            break;
         case TestMode::BF16_Widen:
-            // BF16 Widen: a,b是BF16, c是FP32
-            // 假设a,b输入复用16位端口的高位部分, c用32位端口
-            top_->io_a_in_16_0 = 0;
-            top_->io_a_in_16_1 = (test.a_fp32_bits >> 16) & 0xFFFF;
-            top_->io_b_in_16_0 = 0;
-            top_->io_b_in_16_1 = (test.b_fp32_bits >> 16) & 0xFFFF;
-            top_->io_c_in_32 = test.c_fp32_bits;
+        {
+            float dut_res_fp;
+            memcpy(&dut_res_fp, &dut_res.res_out_32, sizeof(float));
+            printf("DUT Result: %.8f (HEX: 0x%08X)\n", dut_res_fp, dut_res.res_out_32);
+            
+            float expected_fp;
+            memcpy(&expected_fp, &expected_res_fp32, sizeof(float));
+            
+            int64_t ulp_diff = std::abs((int64_t)dut_res.res_out_32 - (int64_t)expected_res_fp32);
+            bool both_zero = both_fp32_zero(dut_res.res_out_32, expected_res_fp32);
+
+            if (error_type == ErrorType::Precise) {
+                pass = (dut_res.res_out_32 == expected_res_fp32) || both_zero;
+            } else {
+                pass = (ulp_diff <= 2) || both_zero; // Widen to FP32, allow small ULP error
+            }
+
+            if (!pass) {
+                printf("ERROR: Expected 0x%08X, Got 0x%08X, ULP diff: %ld\n", 
+                       expected_res_fp32, dut_res.res_out_32, ulp_diff);
+            }
+            printf("ULP diff: %ld\n", ulp_diff);
             break;
-    }
-    
-    test.print_details();
-    single_cycle();
-    
-    int max_cycles = 20;
-    while (max_cycles-- > 0) {
-        if (top_->io_valid_out) {
-            single_cycle();
-            break;
-        } else {
-            top_->io_valid_in = 0;
-            single_cycle();
         }
     }
     
-    // 3. 从DUT读取所有可能的输出
-    DutOutputs dut_res;
-    dut_res.res_out_32   = top_->io_res_out_32;
-    dut_res.res_out_16_0 = top_->io_res_out_16_0;
-    dut_res.res_out_16_1 = top_->io_res_out_16_1;
-    
-    // 4. TestCase自己负责检查并返回结果
-    return test.check_result(dut_res);
-}
+    if (pass) {
+        printf("Result: PASS\n");
+    } else {
+        printf("Result: FAIL\n");
+    }
+    printf("-----------------\n\n");
+    return pass;
+} 

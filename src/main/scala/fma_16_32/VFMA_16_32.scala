@@ -20,7 +20,7 @@ import VParams._
 import race.vpu.yunsuan.util._
 
 class VFMA_16_32 extends Module {
-  val wResMul32 = 36  // Bits to reserve for the significand of the a*b (range: 28 ~ 48)
+  val wResMul32 = 48  // Bits to reserve for the significand of the a*b (range: 28 ~ 48)
   val wResMul16 = wResMul32 / 2  // Bits (FP/BF16) to reserve for the significand of the a*b
   val io = IO(new Bundle {
     val valid_in = Input(Bool())

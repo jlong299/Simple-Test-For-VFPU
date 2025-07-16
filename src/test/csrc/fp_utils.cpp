@@ -1,12 +1,10 @@
-#ifndef __FP_H__
-#define __FP_H__
-
-#include "sim.h"
-#include <math.h>
-#include <stdio.h>
+#include "include/fp_utils.h"
+#include <cmath>
+#include <cstdlib>
+#include <cstring>
+#include <ctime>
 
 // FP16（半精度浮点数）格式：1位符号，5位指数，10位尾数
-typedef uint16_t fp16_t;
 // 将FP16转换为FP32（float）
 float fp16_to_fp32(fp16_t h) {
     uint32_t sign = (h >> 15) & 0x01;
@@ -48,7 +46,9 @@ float fp16_to_fp32(fp16_t h) {
         f = (sign << 31) | (exp << 23) | mant;
     }
     
-    return *(float*)&f;
+    float result;
+    memcpy(&result, &f, sizeof(result));
+    return result;
 }
 
 
@@ -154,8 +154,6 @@ uint16_t fp32_to_fp16(float fp32) {
 }
 
 
-// BF16（半精度浮点数）格式：1位符号，8位指数，7位尾数
-typedef uint16_t bf16_t;
 // 将BF16转换为FP32（float）
 float bf16_to_fp32(bf16_t h) {
     // BF16到FP32的转换非常简单：
@@ -163,7 +161,9 @@ float bf16_to_fp32(bf16_t h) {
     // FP32格式: 1位符号 + 8位指数 + 23位尾数
     // 只需要将BF16左移16位，在尾数低位补0即可
     uint32_t f = ((uint32_t)h) << 16;
-    return *(float*)&f;
+    float result;
+    memcpy(&result, &f, sizeof(result));
+    return result;
 }
 
 // 将FP32（float）转换为BF16
@@ -194,4 +194,104 @@ uint16_t fp32_to_bf16(float fp32) {
     return high16;
 }
 
-#endif
+uint32_t gen_random_fp32(int exp_min, int exp_max) {
+    // 随机生成符号位 (1位)
+    uint32_t sign = (rand() & 1) << 31;
+    
+    // 随机生成指数，范围[exp_min, exp_max]
+    // IEEE 754偏置为127
+    int exp_unbiased = exp_min + (rand() % (exp_max - exp_min + 1));
+    uint32_t exp_biased = (exp_unbiased + 127) & 0xFF; // 加偏置并限制在8位
+    uint32_t exp = exp_biased << 23;
+    
+    // 随机生成23位尾数，拆分多部分以确保充分随机性
+    // 23位拆分为: 8位 + 8位 + 7位
+    uint32_t mantissa_part1 = (rand() & 0xFF) << 15;        // 高8位 (位22-15)
+    uint32_t mantissa_part2 = (rand() & 0xFF) << 7;         // 中8位 (位14-7)
+    uint32_t mantissa_part3 = (rand() & 0x7F);              // 低7位 (位6-0)
+    uint32_t mantissa = mantissa_part1 | mantissa_part2 | mantissa_part3;
+    
+    // 组合成完整的32位浮点数
+    uint32_t result = sign | exp | mantissa;
+    
+    return result;
+}
+
+// 生成指定指数范围的随机半精度浮点数
+uint16_t gen_random_fp16(int exp_min, int exp_max) {
+    // 随机生成符号位 (1位)
+    uint16_t sign = (rand() & 1) << 15;
+    
+    // 随机生成指数，范围[exp_min, exp_max]
+    // IEEE 754 FP16偏置为15
+    int exp_unbiased = exp_min + (rand() % (exp_max - exp_min + 1));
+    uint16_t exp_biased = (exp_unbiased + 15) & 0x1F; // 加偏置并限制在5位
+    uint16_t exp = exp_biased << 10;
+    
+    // 随机生成10位尾数，拆分多部分以确保充分随机性
+    // 10位拆分为: 5位 + 5位
+    uint16_t mantissa_part1 = (rand() & 0x1F) << 5;     // 高5位 (位9-5)
+    uint16_t mantissa_part2 = (rand() & 0x1F);          // 低5位 (位4-0)
+    uint16_t mantissa = mantissa_part1 | mantissa_part2;
+    
+    // 组合成完整的16位浮点数
+    uint16_t fp16_bits = sign | exp | mantissa;
+    
+    return fp16_bits;
+}
+
+// 生成指定指数范围的随机BF16浮点数
+uint16_t gen_random_bf16(int exp_min, int exp_max) {
+    // 随机生成符号位 (1位)
+    uint16_t sign = (rand() & 1) << 15;
+    
+    // 随机生成指数，范围[exp_min, exp_max]
+    // IEEE 754 BF16偏置为127（与FP32相同）
+    int exp_unbiased = exp_min + (rand() % (exp_max - exp_min + 1));
+    uint16_t exp_biased = (exp_unbiased + 127) & 0xFF; // 加偏置并限制在8位
+    uint16_t exp = exp_biased << 7;
+    
+    // 随机生成7位尾数，拆分多部分以确保充分随机性
+    // 7位拆分为: 4位 + 3位
+    uint16_t mantissa_part1 = (rand() & 0xF) << 3;      // 高4位 (位6-3)
+    uint16_t mantissa_part2 = (rand() & 0x7);           // 低3位 (位2-0)
+    uint16_t mantissa = mantissa_part1 | mantissa_part2;
+    
+    // 组合成完整的16位浮点数
+    uint16_t bf16_bits = sign | exp | mantissa;
+    
+    return bf16_bits;
+}
+
+// 生成任意随机的32位浮点数 (排除NaN)
+uint32_t gen_any_fp32() {
+    union {
+        float f;
+        uint32_t i;
+    } val;
+    // rand() 通常最多返回 16-bit, 合并两个以获得完整的32-bit随机数
+    do {
+        val.i = ((uint32_t)rand() << 16) | (uint32_t)rand();
+    } while (std::isnan(val.f));
+    return val.i;
+}
+
+// 生成任意随机的16位浮点数 (排除NaN)
+uint16_t gen_any_fp16() {
+    uint16_t val;
+    // 生成完全随机的16位数值
+    do {
+        val = (uint16_t)rand();
+    } while ((val & 0x7C00) == 0x7C00 && (val & 0x03FF) != 0); // 避免NaN值
+    return val;
+}
+
+// 生成任意随机的BF16浮点数 (排除NaN)
+uint16_t gen_any_bf16() {
+    uint16_t val;
+    // 生成完全随机的16位数值
+    do {
+        val = (uint16_t)rand();
+    } while ((val & 0x7F80) == 0x7F80 && (val & 0x007F) != 0); // 避免NaN值
+    return val;
+} 
