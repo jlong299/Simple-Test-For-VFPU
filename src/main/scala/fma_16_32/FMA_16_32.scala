@@ -272,7 +272,7 @@ class FMA_16_32 extends Module {
   //-----------------------------------------
   //---- Below is S2 (pipeline 2) stage:
   //-----------------------------------------
-  val valid_S2 = RegNext(valid_S1)
+  val valid_S2 = RegNext(valid_S1, init = false.B)
   val input_is_16_S2 = RegEnable(is_16, valid_S1)
   val res_is_32_S2 = RegEnable(res_is_32, valid_S1)
   val res_is_bf16_S2 = RegEnable(res_is_bf16, valid_S1)
@@ -501,7 +501,7 @@ class FMA_16_32 extends Module {
   //---- Below is S3 (pipeline 3) stage:
   //       Adder result shifting and rounding
   //--------------------------------------------------
-  val valid_S3 = RegNext(valid_S2)
+  val valid_S3 = RegNext(valid_S2, init = false.B)
   val c_in_S3 = RegEnable(c_in_S2, valid_S2)
   val input_is_16_S3 = RegEnable(input_is_16_S2, valid_S2)
   val res_is_32_S3 = RegEnable(res_is_32_S2, valid_S2)

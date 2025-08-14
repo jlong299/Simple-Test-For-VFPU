@@ -97,8 +97,8 @@ class IntMUL_12_24_noBooth extends Module {
   /**
    *  Second pipeline stage: 48 + 48
    */
-  val is16S1 = RegNext(io.is_16)
-  val wallaceOutReg = wallaceOut map {x => RegNext(x)}
+  val is16S1 = RegEnable(io.is_16, io.valid_in)
+  val wallaceOutReg = wallaceOut map {x => RegEnable(x, io.valid_in)}
 
   //---- Sum of final two 48b numbers ----
   // 1. Low 24 bits sum
@@ -109,7 +109,7 @@ class IntMUL_12_24_noBooth extends Module {
                      Cat(wallaceOutReg(1)(47, 24), Mux(is16S1, false.B, lowSum25(24)))
   val highSum24 = highSum25(24, 1)
 
-  io.valid_out := RegNext(io.valid_in)
+  io.valid_out := RegNext(io.valid_in, init = false.B)
   io.res_out := Cat(highSum24, lowSum25(23, 0))
 }
 
@@ -132,7 +132,7 @@ class IntMUL_12_24_dummy extends Module {
   res_16_low := io.a_in(11, 0) * io.b_in(11, 0)
   res_32 := io.a_in * io.b_in
 
-  io.valid_out := RegNext(io.valid_in)
+  io.valid_out := RegNext(io.valid_in, init = false.B)
 
 
   val res_out = Mux(!io.is_16, res_32, Cat(res_16_high, res_16_low))
